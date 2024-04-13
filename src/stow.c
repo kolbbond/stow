@@ -16,6 +16,7 @@
 
 #include "arg.h"
 
+// global struct
 struct g {
 	int value;
 	char prefix;
@@ -27,7 +28,8 @@ struct g {
 #define LENGTH(X) (sizeof(X) / sizeof((X)[0]))
 #define INITIAL_CAPACITY 2
 
-static char *argv0;
+//  globals!
+static char *argv0; 
 static char **cmd;
 static pid_t cmdpid;
 static FILE *inputf;
@@ -52,9 +54,8 @@ static unsigned int window_width, window_height;
 static bool hidden = true;
 
 __attribute__ ((noreturn))
-static void
-die(const char *fmt, ...)
-{
+static void die(const char *fmt, ...) {
+	// returns error message and quits
 	int tmp = errno;
 	va_list ap;
 
@@ -73,39 +74,43 @@ die(const char *fmt, ...)
 	exit(1);
 }
 
-static void
-usage()
-{
+static void usage() {
+	// displays usage options and quits through die()
 	die(
-"usage: stw [-Vt] [-x pos] [-y pos] [-X pos] [-Y pos] [-a align]\n"
+"usage: stow [-Vt] [-x pos] [-y pos] [-X pos] [-Y pos] [-a align]\n"
 "           [-f foreground] [-b background] [-F font] [-B borderpx]\n"
 "           [-p period] [-A alpha] command [arg ...]"
 	);
 }
 
-static void
-signal_handler(int s)
-{
+static void signal_handler(int s) {
+	// dunno what this does
 	if (-1 == write(spipe[1], s == SIGCHLD ? "c" : "a", 1))
 		abort();
 }
 
-static void
-start_cmd()
-{
+static void start_cmd() {
+	// this code uses a lot of globals...
+	// what is fds?
 	int fds[2];
+
+	// check pipe exists and is good
 	if (-1 == pipe(fds))
 		die("pipe:");
 
+	// read input 
 	inputf = fdopen(fds[0], "r");
 	if (inputf == NULL)
 		die("fdopen:");
 
+	// create a fork
 	cmdpid = fork();
 	switch (cmdpid) {
+	// bad fork?	
 	case -1:
 		die("fork:");
 	case 0:
+		// close everything
 		close(spipe[0]);
 		close(spipe[1]);
 		close(xfd);
@@ -115,15 +120,16 @@ start_cmd()
 		execvp(cmd[0], cmd);
 		exit(1);
 	default:
+		// resume normal op
 		break;
 	}
 
+	// what is fds[1]?
 	close(fds[1]);
 }
 
-static void
-read_text()
-{
+static void read_text() {
+	// self-explanatory
 	int dlen = strlen(delimeter);
 
 	len = 0;
@@ -165,9 +171,8 @@ read_text()
 	}
 }
 
-static void
-draw()
-{
+static void draw() {
+	// draw window
 	unsigned int prev_mw = window_width;
 	unsigned int prev_mh = window_height;
 
@@ -175,34 +180,47 @@ draw()
 	window_width = 0;
 	window_height = 0;
 	for (char *line = text; line < text + len; line += strlen(line) + 1) {
+		// X library glypth for each character?
 		XGlyphInfo ex;
 		XftTextExtentsUtf8(dpy, xfont, (unsigned char *)line, strlen(line), &ex);
+
+		// check we're onscreen
 		if (ex.xOff > window_width)
 			window_width = ex.xOff;
 		window_height += xfont->ascent + xfont->descent;
 	}
 
+	// hidden is a zero size window ... 
 	hidden = window_width == 0 || window_height == 0;
-	if (hidden)
+	if (hidden){
+		printf("0 size window = hidden\n");
 		return;
+	}
 
+	// add border to window sizes
 	window_width += borderpx * 2;
 	window_height += borderpx * 2;
 
+	// why would the window sizes change here? @hey
 	if (window_width != prev_mw || window_height != prev_mh) {
 		// TODO: for some reason old GC value still works after XFreePixmap call
+		// creates a new pixmap
+		printf("window size changes, redraw pixmap\n");
 		XFreePixmap(dpy, drawable);
 		drawable = XCreatePixmap(dpy, root, window_width, window_height, depth);
 		if (!drawable)
 			die("cannot allocate drawable");
 		XftDrawChange(xdraw, drawable);
 	}
+
+	printf("setting stow foreground\n");
 	XSetForeground(dpy, xgc, xbackground.pixel);
 	XFillRectangle(dpy, drawable, xgc, 0, 0, window_width, window_height);
 
 	// render text lines
 	unsigned int y = borderpx;
 	for (char *line = text; line < text + len; line += strlen(line) + 1) {
+		// more glyphs ... ?
 		XGlyphInfo ex;
 		XftTextExtentsUtf8(dpy, xfont, (unsigned char *)line, strlen(line), &ex);
 
@@ -214,6 +232,7 @@ draw()
 			x = (window_width - ex.xOff) / 2;
 		}
 
+		// X library draw function
 		XftDrawStringUtf8(
 			xdraw, &xforeground, xfont, x, y + xfont->ascent,
 			(unsigned char *)line, strlen(line)
@@ -222,9 +241,8 @@ draw()
 	}
 }
 
-static void
-reap()
-{
+static void reap() {
+	// does this kill the process?
 	for (;;) {
 		int wstatus;
 		pid_t p = waitpid(-1, &wstatus, cmdpid == 0 ? WNOHANG : 0);
@@ -243,9 +261,8 @@ reap()
 	}
 }
 
-static int
-pos(struct g g, int size)
-{
+static int pos(struct g g, int size){
+	// 
 	int sign = g.prefix == '-' ? -1 : 1;
 	switch (g.suffix) {
 	case '%': return sign * (g.value / 100.0) * size;
@@ -253,24 +270,27 @@ pos(struct g g, int size)
 	}
 }
 
-static void
-run()
-{
+static void run() {
+	// run event loop
 	bool restart_now = true;
 	for (;;) {
+		// check if we should restart
 		if (restart_now && cmdpid == 0 && inputf == NULL) {
 			restart_now = false;
 			start_cmd();
 		}
 
+		// what is this flag
 		bool dirty = false;
 
+		// dunno what this is 
 		int inputfd = 0;
 		if (inputf != NULL) {
 			inputfd = fileno(inputf);
 			// TODO: Handle fileno error
 		}
 
+		// different inputs?
 		struct pollfd fds[] = {
 			{.fd = spipe[0], .events = POLLIN}, // Signals
 			{.fd = xfd,      .events = POLLIN}, // X events
@@ -282,6 +302,7 @@ run()
 			fds_len--;
 		}
 
+		// check if poll is bad?
 		if (-1 == poll(fds, fds_len, -1)) {
 			if (errno == EINTR) {
 				errno = 0;
@@ -291,6 +312,8 @@ run()
 		}
 
 		// Read subcommand output
+		// this is where we determines the command passed into our 
+		// stow program
 		if (inputf && (fds[2].revents & POLLIN || fds[2].revents & POLLHUP)) {
 			read_text();
 			draw();
@@ -330,6 +353,12 @@ run()
 
 				} else if (ev.type == ButtonPress) {
 					// X Window was clicked, restart subcommand
+					// here's where we see a button press
+					// this is where an overlay window should send
+					// the signal to any underlying windows ...
+					// so we need some window index and position and
+					// order from foreground to background
+					printf("ButtonPress registered\n");
 					if (cmdpid && kill(-cmdpid, SIGTERM) == -1) {
 						die("kill:");
 					}
@@ -339,11 +368,13 @@ run()
 			}
 		}
 
+		// hidden window
 		if (hidden) {
 			XUnmapWindow(dpy, win);
 			XSync(dpy, False);
 
 		} else if (dirty) {
+			// set window position within server
 			if (window_on_top) {
 				XRaiseWindow(dpy, win);
 			} else {
@@ -352,6 +383,7 @@ run()
 
 			XMapWindow(dpy, win);
 
+			// set window position
 			int x = pos(px, screen_width);
 			if (px.prefix == '-') {
 				x = screen_width + x - window_width;
@@ -364,6 +396,7 @@ run()
 			}
 			y += pos(ty, window_height);
 
+			// final move and sync
 			XMoveResizeWindow(dpy, win, x, y, window_width, window_height);
 			XCopyArea(dpy, drawable, win, xgc, 0, 0, window_width, window_height, 0, 0);
 			XSync(dpy, False);
@@ -371,11 +404,10 @@ run()
 	}
 }
 
-static void
-setup(char *font)
-{
+static void setup(char *font){
 	// self pipe and signal handler
 
+	// bad pipe
 	if (pipe(spipe) == -1)
 		die("pipe:");
 
@@ -383,24 +415,41 @@ setup(char *font)
 	sa.sa_handler = signal_handler;
 	sa.sa_flags = SA_RESTART;
 
+	// check signals for bad values
 	if (sigaction(SIGCHLD, &sa, NULL) == -1
 	|| sigaction(SIGALRM, &sa, NULL) == -1)
 		die("sigaction:");
 
 	// xlib and xft
-
+	// opens a new connection to the X server
 	dpy = XOpenDisplay(NULL);
 	if (!dpy)
 		die("cannot open display");
 
+	// get the display connection number to the X server
 	xfd = ConnectionNumber(dpy);
 
+	// set screen and window
+	// can we get the other windows from this?
+	// get the default screen number for our display connection
+	// for a single screen app...
 	screen = DefaultScreen(dpy);
+
+	// debug get the total number of screens
+	int screencount = ScreenCount(dpy);
+	printf("We find %i screens\n",screencount);
+
+	// gets the root window for our display connection (dpy)
+	// and the screen (monitor)
+	// returns a Window object
 	root = RootWindow(dpy, screen);
 
+	// display size
 	screen_width = DisplayWidth(dpy, screen);
 	screen_height = DisplayHeight(dpy, screen);
 
+	// looks like this sets our new display to the currently
+	// set options
 	XVisualInfo vi = {
 		.screen = screen,
 		.depth = depth,
@@ -409,14 +458,17 @@ setup(char *font)
 	XMatchVisualInfo(dpy, screen, vi.depth, TrueColor, &vi);
 	Visual *visual = vi.visual;
 
+	// creates a new colormap
 	Colormap colormap = XCreateColormap(dpy, root, visual, None);
 	// dumb 1x1 drawable only to initialize xdraw
+	// I respect this comment, love a good hack
 	drawable = XCreatePixmap(dpy, root, 1, 1, vi.depth);
 	xdraw = XftDrawCreate(dpy, drawable, visual, colormap);
 	xfont = XftFontOpenName(dpy, screen, font);
 	if (!xfont)
 		die("cannot load font");
 
+	// allocate colors for foreground and background
 	// TODO: use dedicated color variables instead of array
 	if (!XftColorAllocName(dpy, visual, colormap, colors[0], &xforeground))
 		die("cannot allocate foreground color");
@@ -431,12 +483,15 @@ setup(char *font)
 	xbackground.pixel = (r << 16) + (g << 8) + b;
 	xbackground.pixel |= (unsigned char)(0xff * alpha) << 24;
 
+	// window attributes
 	XSetWindowAttributes swa;
 	swa.override_redirect = True;
 	swa.background_pixel = xbackground.pixel;
 	swa.border_pixel = xbackground.pixel;
 	swa.colormap = colormap;
 	swa.event_mask = ExposureMask | ButtonPressMask;
+
+	// create our window
 	win = XCreateWindow(
 		dpy, root,
 		-1, -1, 1, 1, 0,
@@ -445,6 +500,7 @@ setup(char *font)
 		&swa
 	);
 
+	// graphics context
 	XGCValues gcvalues = {0};
 	gcvalues.graphics_exposures = False;
 	xgc = XCreateGC(dpy, drawable, GCGraphicsExposures, &gcvalues);
@@ -452,9 +508,7 @@ setup(char *font)
 	XSelectInput(dpy, win, swa.event_mask);
 }
 
-static int
-parsegeom(char *b, char *prefix, char *suffix, struct g *g)
-{
+static int parsegeom(char *b, char *prefix, char *suffix, struct g *g) {
 	g->prefix = 0;
 	g->suffix = 0;
 
@@ -498,8 +552,8 @@ parsegeom(char *b, char *prefix, char *suffix, struct g *g)
 	return 0;
 }
 
-static int
-stoi(char *s, int *r) {
+static int stoi(char *s, int *r) {
+	// string to int?
 	char *e;
 	long int li = strtol(s, &e, 10);
 	*r = (int)li;
@@ -508,46 +562,65 @@ stoi(char *s, int *r) {
 		|| *e != '\0';
 }
 
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
+	// here's main!
 	char *xfont = font;
 
+	// check input arguments
 	ARGBEGIN {
 	case 'V':
+		//version
+		printf("print version\n");
 		printf("%s " VERSION "\n", argv0);
 		return 0;
 		break;
 	case 'x':
+		// set x pos
+		printf("set x pos\n");
 		if (-1 == parsegeom(EARGF(usage()), "+-", "%", &px))
 			usage();
 		break;
 	case 'y':
+		// set y pos
+		printf("set y pos\n");
 		if (-1 == parsegeom(EARGF(usage()), "+-", "%", &py))
 			usage();
 		break;
 	case 'X':
+		// is this just capital?
+		printf("set x/X pos\n");
 		if (-1 == parsegeom(EARGF(usage()), "+-", "%", &tx))
 			usage();
 		break;
 	case 'Y':
+		printf("set y/Y pos\n");
 		if (-1 == parsegeom(EARGF(usage()), "+-", "%", &ty))
 			usage();
 		break;
 	case 'f':
+		// set foreground color
+		printf("setting foreground color\n");
 		colors[0] = EARGF(usage());
 		break;
 	case 'b':
+		// set background color
+		printf("set background color\n");
 		colors[1] = EARGF(usage());
 		break;
 	case 'F':
+		// set font
+		printf("setting font\n");
 		xfont = EARGF(usage());
 		break;
 	case 'B':
+		// set border pixels
+		printf("set border pixel thickness\n");
 		if (stoi(EARGF(usage()), &borderpx))
 			usage();
 		break;
 	case 'a': {
+		// alignment
+		printf("set alignment\n");
 		const char *a = EARGF(usage());
 		align = a[0];
 		if (strlen(a) != 1
@@ -555,10 +628,14 @@ main(int argc, char *argv[])
 			usage();
 	} break;
 	case 'p':
+		// period?
+		printf("period set\n");
 		if (stoi(EARGF(usage()), &period))
 			usage();
 		break;
 	case 'A': {
+		// set alpha (transparency)
+		printf("set alpha (transparency)\n");
 		char *s = EARGF(usage());
 		char *end;
 		alpha = strtod(s, &end);
@@ -566,18 +643,29 @@ main(int argc, char *argv[])
 			usage();
 	} break;
 	case 't':
+		// set window on top
+		printf("set window on top\n");
 		window_on_top = true;
 		break;
 	default:
+		// default
+		printf("default\n");
 		usage();
 	} ARGEND
 
-	if (argc == 0)
+	if (argc == 0){
+		// no arguments return list and kills process
+		printf("enter some args!\n");
 		usage();
+	}
 
+	// set the input argument command to our global pointer
 	cmd = argv;
 
+	// run the setup
 	setup(xfont);
+
+	// run the process
 	run();
 
 	return 0;
