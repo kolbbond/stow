@@ -571,7 +571,7 @@ int main(int argc, char *argv[]) {
 	case 'V':
 		//version
 		printf("print version\n");
-		printf("%s " VERSION "\n", argv0);
+		printf("%s  VERSION \n", argv0);
 		return 0;
 		break;
 	case 'x':
