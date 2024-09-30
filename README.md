@@ -1,3 +1,8 @@
+
+Forked and updated with cmake build system and  
+X11 clickthrough to create a true overlay.
+
+-- original README below
 # stw
 
 stw is a simple text window for X.

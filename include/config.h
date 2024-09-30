@@ -4,19 +4,20 @@ static int borderpx = 0;
 static char font[] = "monospace:size=10";
 
 /* background opacity */
-static double alpha = 0.1;
+static double alpha = 0.01;
 
 /* X window geometry */
-struct g px = {0};
-struct g py = {0};
-struct g tx = {0};
-struct g ty = {0};
+// assume 1920x1080?
+struct g px = {800};
+struct g py = {70};
+struct g tx = {5};
+struct g ty = {10};
 
 /* text alignment: l, r and c for left, right and centered respectively */
 static char align = 'l';
 
 /* foreground and background colors */
-static char *colors[2] = { "#dddddd", "#000000" };
+static char *colors[2] = { "#33ffd1", "#000000" };
 
 /* time in seconds between subcommand runs.
 0 will completely disable subcommand restarts and -1 will make them instant.

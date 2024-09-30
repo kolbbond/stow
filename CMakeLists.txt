@@ -2,6 +2,9 @@
 cmake_minimum_required(VERSION 3.30)
 project(stow)
 
+# compile commands
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # find relevant packages
 find_package(Freetype REQUIRED)
 find_package(X11 REQUIRED)
@@ -19,6 +22,9 @@ target_link_libraries(main
     freetype
     X11
     Xft
+    Xext
+    Xfixes
+    
 )
 
 target_include_directories(main PUBLIC
