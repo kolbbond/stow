@@ -199,14 +199,14 @@ static void draw() {
 	if(window_width != prev_mw || window_height != prev_mh) {
 		// TODO: for some reason old GC value still works after XFreePixmap call
 		// creates a new pixmap
-		printf("window size changes, redraw pixmap\n");
+		//printf("window size changes, redraw pixmap\n");
 		XFreePixmap(dpy, drawable);
 		drawable = XCreatePixmap(dpy, root, window_width, window_height, depth);
 		if(!drawable) die("cannot allocate drawable");
 		XftDrawChange(xdraw, drawable);
 	}
 
-	printf("setting stow foreground\n");
+	//printf("setting stow foreground\n");
 	XSetForeground(dpy, xgc, xbackground.pixel);
 	XFillRectangle(dpy, drawable, xgc, 0, 0, window_width, window_height);
 
@@ -348,7 +348,7 @@ static void run() {
 					// the signal to any underlying windows ...
 					// so we need some window index and position and
 					// order from foreground to background
-					printf("ButtonPress registered\n");
+					//printf("ButtonPress registered\n");
 					int root_x, root_y;
 					unsigned int mask;
 					XQueryPointer(dpy,
@@ -361,7 +361,7 @@ static void run() {
 						&root_y,
 						&mask); //<--four
 
-					printf("Mouse coordinates (X: %d, Y: %d)\n", root_x, root_y);
+					//printf("Mouse coordinates (X: %d, Y: %d)\n", root_x, root_y);
 
 					// get tree of windows
 					/*
@@ -465,7 +465,7 @@ static void setup(char* font) {
 
 	// debug get the total number of screens
 	int screencount = ScreenCount(dpy);
-	printf("We find %i screens\n", screencount);
+	//printf("We find %i screens\n", screencount);
 
 	// gets the root window for our display connection (dpy)
 	// and the screen (monitor)
