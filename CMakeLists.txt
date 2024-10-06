@@ -14,11 +14,11 @@ set(source_list
     src/stow.c
 )
 
-add_executable(main
+add_executable(stow
     ${source_list}
 )
 
-target_link_libraries(main
+target_link_libraries(stow
     freetype
     X11
     Xft
@@ -27,9 +27,14 @@ target_link_libraries(main
     
 )
 
-target_include_directories(main PUBLIC
+target_include_directories(stow PUBLIC
     include
     ${FREETYPE_INCLUDE_DIRS}
     
 )
 
+# install
+install(FILES ${CMAKE_BINARY_DIR}/stow 
+    PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE WORLD_EXECUTE
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+)
