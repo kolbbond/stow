@@ -8,8 +8,8 @@ static double alpha = 0.01;
 
 /* X window geometry */
 // assume 1920x1080?
-struct g px = {1200};
-struct g py = {70};
+struct g px = {1920-700};
+struct g py = {20};
 struct g tx = {5};
 struct g ty = {10};
 

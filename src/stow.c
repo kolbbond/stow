@@ -31,14 +31,14 @@ struct g {
 #define INITIAL_CAPACITY 2
 
 //  globals!
-static char* argv0;
-static char** cmd;
-static pid_t cmdpid;
+static char* argv0; // default version argument
+static char** cmd; // command from argv
+static pid_t cmdpid; // cmd process id
 static FILE* inputf;
-static char* text;
+static char* text; // buffer to store text
 static size_t len;
 static size_t cap;
-static int spipe[2];
+static int spipe[2]; // pipe file descriptors [0],[1] for reading,writing
 
 // xlib and xft
 static Display* dpy;
@@ -89,6 +89,8 @@ static void signal_handler(int s) {
 }
 
 static void start_cmd() {
+	printf("start command\n");
+
 	// this code uses a lot of globals...
 	// what is fds?
 	int fds[2];
@@ -96,7 +98,7 @@ static void start_cmd() {
 	// check pipe exists and is good
 	if(-1 == pipe(fds)) die("pipe:");
 
-	// read input
+	// read input and store in inputf
 	inputf = fdopen(fds[0], "r");
 	if(inputf == NULL) die("fdopen:");
 
@@ -105,76 +107,144 @@ static void start_cmd() {
 	switch(cmdpid) {
 	// bad fork?
 	case -1:
+		printf("bad fork\n");
 		die("fork:");
 	case 0:
-		// close everything
+		// new process (0 means success)
+		printf("open process\n");
+
+		// close old file descriptors
 		close(spipe[0]);
 		close(spipe[1]);
+
+		// close x server connection number
 		close(xfd);
+
+		// close newest (read pipe)
 		close(fds[0]);
+
+		// copy write pipe to stdout_fileno
 		dup2(fds[1], STDOUT_FILENO);
+
+		// set process group ID of current process to its process ID hence: (0,0)
 		setpgid(0, 0);
+
+		// replace current process with cmd[0] with arguments cmd
+		// doesn't error check?
 		execvp(cmd[0], cmd);
+
+		// exits current process
 		exit(1);
+
 	default:
-		// resume normal op
+		// weird output
 		break;
 	}
 
-	// what is fds[1]?
+	// close file descriptor (write)
 	close(fds[1]);
 }
 
 static void read_text() {
-	// self-explanatory
+	printf("---read text\n");
+
+	// length of chosen delimeter
 	int dlen = strlen(delimeter);
 
+	// for select
+	fd_set readfds;
+	struct timeval timeout;
+
+	// while stuff to read
 	len = 0;
 	for(;;) {
+
+		// if read length greater than buffer, add memory
 		if(len + dlen + 2 > cap) {
 			// buffer must have sufficient capacity to
 			// store delimeter string, \n and \0 in one read
-			cap = cap ? cap * 2 : INITIAL_CAPACITY;
+			cap = cap ? cap * 2 : INITIAL_CAPACITY; // doubles cap if we have any cap
+
+			// reallocate memory
 			text = realloc(text, cap);
+
+			// error handle
 			if(text == NULL) die("realloc:");
 		}
 
-		char* line = &text[len];
-		if(NULL == fgets(line, cap - len, inputf)) {
-			if(feof(inputf)) {
-				if(fclose(inputf) == -1) die("fclose subcommand output:");
-				inputf = NULL;
-				break;
-			} else {
-				die("fgets subcommand output:");
+		// select setup
+		FD_ZERO(&readfds);
+		FD_SET(spipe[0], &readfds);
+		timeout.tv_sec = 1; // wait 1s
+		timeout.tv_usec = 0;
+
+		// check if there is data to be read
+		int result = select(spipe[0] + 1, &readfds, NULL, NULL, &timeout);
+		bool use_select = false;
+		if(result > 0 || !use_select) {
+			//printf("result: %i\n", result);
+			// read lines from inputf filestream (with NULL check)
+			char* line = &text[len];
+			if(NULL == fgets(line, cap - len, inputf)) {
+				// check end of stream
+				if(feof(inputf)) {
+					// close with error handle
+					if(fclose(inputf) == -1) die("fclose subcommand output:");
+
+					// reset file and break out
+					inputf = NULL;
+					break;
+				} else {
+					die("fgets subcommand output:");
+				}
 			}
-		}
 
-		int llen = strlen(line);
+			printf("input: %s\n", line);
 
-		if(line[llen - 1] == '\n') {
-			line[--llen] = '\0';
-			len += llen + 1;
+			// check for end characters in read line
+			int llen = strlen(line);
+			if(line[llen - 1] == '\n') {
+				line[--llen] = '\0';
+				len += llen + 1;
+			} else {
+				len += llen;
+			}
+
+			// check for lines that are delimeter
+			if(llen == dlen && strcmp(line, delimeter) == 0) {
+				len -= dlen + 2;
+				break;
+			}
+
+			// set max length ...
+			int max_length = 20;
+			if(len > max_length) {
+				feof(inputf);
+				break;
+			}
+		} else if(result == 0) {
+			printf("timeout reached, no data\n");
 		} else {
-			len += llen;
-		}
-
-		if(llen == dlen && strcmp(line, delimeter) == 0) {
-			len -= dlen + 2;
-			break;
+			perror("select failed");
 		}
 	}
+
+	printf("--- done with text\n");
 }
 
 static void draw() {
+	printf("--- draw --- \n");
+
 	// draw window
 	unsigned int prev_mw = window_width;
 	unsigned int prev_mh = window_height;
 
-	// find maximum text line width and height
+	// find maximum text line width and height (does this not draw?
+	// @hey: seems like we do this loop twice, here and below
 	window_width = 0;
 	window_height = 0;
 	for(char* line = text; line < text + len; line += strlen(line) + 1) {
+
 		// X library glypth for each character?
 		XGlyphInfo ex;
 		XftTextExtentsUtf8(dpy, xfont, (unsigned char*)line, strlen(line), &ex);
@@ -265,9 +335,14 @@ static void run() {
 	// run event loop
 	bool restart_now = true;
 	for(;;) {
+
 		// check if we should restart
+		// if restart_now and the cmd process and input files are empty/done/NULL
 		if(restart_now && cmdpid == 0 && inputf == NULL) {
 			restart_now = false;
+
+			// start cmd generates a new inputf and cmdpid (fork)
+			// inputf = fdopen(fds[0], "r");
 			start_cmd();
 		}
 
@@ -277,6 +352,7 @@ static void run() {
 		// dunno what this is
 		int inputfd = 0;
 		if(inputf != NULL) {
+
 			inputfd = fileno(inputf);
 			// TODO: Handle fileno error
 		}
@@ -361,36 +437,6 @@ static void run() {
 						&root_y,
 						&mask); //<--four
 
-					//printf("Mouse coordinates (X: %d, Y: %d)\n", root_x, root_y);
-
-					// get tree of windows
-					/*
-					Window root_win, par_win;
-					Window* chd_win;
-					unsigned int num_win;
-					XQueryTree(dpy, XRootWindow(dpy, 0), &root_win, &par_win, &chd_win, &num_win);
-
-					printf("num wins: %lu\n", num_win);
-
-                    // create new pointer event
-                    XEvent pev;
-                    
-
-					// walk over windows
-					// send event to every window? lol
-                    // appears XSendEvent is blocked by some applications
-                    // so we use a Xfixes set region instead
-					for(int i = 0; i < num_win; i++) {
-						// send coordinates to underlying window
-                        //printf("send event: %i\n",i);
-                        ev.xkey.window = chd_win[i];
-						if(!XSendEvent(dpy, chd_win[i], 0, KeyPressMask, &ev)) {
-							printf("click error\n");
-						}
-					}
-                    */
-
-
 					if(cmdpid && kill(-cmdpid, SIGTERM) == -1) {
 						die("kill:");
 					}
@@ -432,9 +478,9 @@ static void run() {
 			XMoveResizeWindow(dpy, win, x, y, window_width, window_height);
 			XCopyArea(dpy, drawable, win, xgc, 0, 0, window_width, window_height, 0, 0);
 			XSync(dpy, False);
-		}
-	}
-}
+		} // dirty option
+	} // forever loop
+} // run
 
 static void setup(char* font) {
 	// self pipe and signal handler
@@ -533,7 +579,6 @@ static void setup(char* font) {
 		XFixesSetWindowShapeRegion(dpy, win, ShapeInput, 0, 0, region);
 		XFixesDestroyRegion(dpy, region);
 	}
-    
 
 	// graphics context
 	XGCValues gcvalues = {0};
