@@ -9,6 +9,26 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Freetype REQUIRED)
 find_package(X11 REQUIRED)
 
+# create a library here 
+
+# add test executable
+add_executable(test_xwindow test/test_xwindow.cpp)
+target_link_libraries(test_xwindow
+    freetype
+    X11
+    Xft
+    Xext
+    Xfixes
+    
+)
+
+target_include_directories(test_xwindow PUBLIC
+    include
+    ${FREETYPE_INCLUDE_DIRS}
+    
+)
+
+if(0)
 # add sources
 set(source_list 
     src/stow.c
@@ -32,6 +52,7 @@ target_include_directories(stow PUBLIC
     ${FREETYPE_INCLUDE_DIRS}
     
 )
+endif()
 
 # install
 install(FILES ${CMAKE_BINARY_DIR}/stow 

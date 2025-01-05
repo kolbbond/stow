@@ -1,5 +1,5 @@
 /* See LICENSE file for copyright and license details. */
-#include <errno.h>
+
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
@@ -7,23 +7,12 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <unistd.h>
-#include <X11/Xft/Xft.h>
-#include <X11/Xlib.h>
-#include <X11/extensions/Xfixes.h>
-#include <X11/extensions/shape.h>
 
 #include "arg.h"
 
-// global struct
-struct g {
-	int value;
-	char prefix;
-	char suffix;
-};
+#include "error.h"
 
 #include "config.h"
 
@@ -40,48 +29,6 @@ static size_t len;
 static size_t cap;
 static int spipe[2]; // pipe file descriptors [0],[1] for reading,writing
 
-// xlib and xft
-static Display* dpy;
-static int xfd;
-static int screen;
-static int depth = 32;
-static Window win, root;
-static Drawable drawable;
-static GC xgc;
-static XftDraw* xdraw;
-static XftColor xforeground, xbackground;
-static XftFont* xfont;
-static unsigned int screen_width, screen_height;
-static unsigned int window_width, window_height;
-static bool hidden = true;
-static bool overlay = true;
-
-__attribute__((noreturn)) static void die(const char* fmt, ...) {
-	// returns error message and quits
-	int tmp = errno;
-	va_list ap;
-
-	va_start(ap, fmt);
-	(void)vfprintf(stderr, fmt, ap);
-	va_end(ap);
-
-	if(fmt[0] && fmt[strlen(fmt) - 1] == ':') {
-		(void)fputc(' ', stderr);
-		errno = tmp;
-		perror(NULL);
-	} else {
-		(void)fputc('\n', stderr);
-	}
-
-	exit(1);
-}
-
-static void usage() {
-	// displays usage options and quits through die()
-	die("usage: stow [-Vt] [-x pos] [-y pos] [-X pos] [-Y pos] [-a align]\n"
-		"           [-f foreground] [-b background] [-F font] [-B borderpx]\n"
-		"           [-p period] [-A alpha] command [arg ...]");
-}
 
 static void signal_handler(int s) {
 	// dunno what this does
@@ -232,104 +179,7 @@ static void read_text() {
 	printf("--- done with text\n");
 }
 
-static void draw() {
-	printf("--- draw --- \n");
 
-	// draw window
-	unsigned int prev_mw = window_width;
-	unsigned int prev_mh = window_height;
-
-	// find maximum text line width and height (does this not draw?
-	// @hey: seems like we do this loop twice, here and below
-	window_width = 0;
-	window_height = 0;
-	for(char* line = text; line < text + len; line += strlen(line) + 1) {
-
-		// X library glypth for each character?
-		XGlyphInfo ex;
-		XftTextExtentsUtf8(dpy, xfont, (unsigned char*)line, strlen(line), &ex);
-
-		// check we're onscreen
-		if(ex.xOff > window_width) window_width = ex.xOff;
-		window_height += xfont->ascent + xfont->descent;
-	}
-
-	// hidden is a zero size window ...
-	hidden = window_width == 0 || window_height == 0;
-	if(hidden) {
-		printf("0 size window = hidden\n");
-		return;
-	}
-
-	// add border to window sizes
-	window_width += borderpx * 2;
-	window_height += borderpx * 2;
-
-	// why would the window sizes change here? @hey
-	if(window_width != prev_mw || window_height != prev_mh) {
-		// TODO: for some reason old GC value still works after XFreePixmap call
-		// creates a new pixmap
-		//printf("window size changes, redraw pixmap\n");
-		XFreePixmap(dpy, drawable);
-		drawable = XCreatePixmap(dpy, root, window_width, window_height, depth);
-		if(!drawable) die("cannot allocate drawable");
-		XftDrawChange(xdraw, drawable);
-	}
-
-	//printf("setting stow foreground\n");
-	XSetForeground(dpy, xgc, xbackground.pixel);
-	XFillRectangle(dpy, drawable, xgc, 0, 0, window_width, window_height);
-
-	// render text lines
-	unsigned int y = borderpx;
-	for(char* line = text; line < text + len; line += strlen(line) + 1) {
-		// more glyphs ... ?
-		XGlyphInfo ex;
-		XftTextExtentsUtf8(dpy, xfont, (unsigned char*)line, strlen(line), &ex);
-
-		// text alignment
-		unsigned int x = borderpx;
-		if(align == 'r') {
-			x = window_width - ex.xOff;
-		} else if(align == 'c') {
-			x = (window_width - ex.xOff) / 2;
-		}
-
-		// X library draw function
-		XftDrawStringUtf8(xdraw, &xforeground, xfont, x, y + xfont->ascent, (unsigned char*)line, strlen(line));
-		y += xfont->ascent + xfont->descent;
-	}
-}
-
-static void reap() {
-	// does this kill the process?
-	for(;;) {
-		int wstatus;
-		pid_t p = waitpid(-1, &wstatus, cmdpid == 0 ? WNOHANG : 0);
-		if(p == -1) {
-			if(cmdpid == 0 && errno == ECHILD) {
-				errno = 0;
-				break;
-			}
-			die("waitpid:");
-		}
-		if(p == 0) break;
-		if(p == cmdpid && (WIFEXITED(wstatus) || WIFSIGNALED(wstatus))) {
-			cmdpid = 0;
-		}
-	}
-}
-
-static int pos(struct g g, int size) {
-	//
-	int sign = g.prefix == '-' ? -1 : 1;
-	switch(g.suffix) {
-	case '%':
-		return sign * (g.value / 100.0) * size;
-	default:
-		return sign * g.value;
-	}
-}
 
 static void run() {
 	// run event loop
@@ -407,78 +257,6 @@ static void run() {
 			}
 		}
 
-		// Process X events
-		if(fds[1].revents & POLLIN) {
-			while(XPending(dpy)) {
-				XEvent ev;
-				XNextEvent(dpy, &ev);
-
-				if(ev.type == Expose && ev.xexpose.count == 0) {
-					// Last expose event processed, redraw once
-					dirty = true;
-
-				} else if(ev.type == ButtonPress) {
-					// X Window was clicked, restart subcommand
-					// here's where we see a button press
-					// this is where an overlay window should send
-					// the signal to any underlying windows ...
-					// so we need some window index and position and
-					// order from foreground to background
-					//printf("ButtonPress registered\n");
-					int root_x, root_y;
-					unsigned int mask;
-					XQueryPointer(dpy,
-						DefaultRootWindow(dpy),
-						&root,
-						&root,
-						&root_x,
-						&root_y,
-						&root_x,
-						&root_y,
-						&mask); //<--four
-
-					if(cmdpid && kill(-cmdpid, SIGTERM) == -1) {
-						die("kill:");
-					}
-					alarm(0);
-					restart_now = true;
-				}
-			}
-		}
-
-		// hidden window
-		if(hidden) {
-			XUnmapWindow(dpy, win);
-			XSync(dpy, False);
-
-		} else if(dirty) {
-			// set window position within server
-			if(window_on_top) {
-				XRaiseWindow(dpy, win);
-			} else {
-				XLowerWindow(dpy, win);
-			}
-
-			XMapWindow(dpy, win);
-
-			// set window position
-			int x = pos(px, screen_width);
-			if(px.prefix == '-') {
-				x = screen_width + x - window_width;
-			}
-			x += pos(tx, window_width);
-
-			int y = pos(py, screen_height);
-			if(py.prefix == '-') {
-				y = screen_height + y - window_height;
-			}
-			y += pos(ty, window_height);
-
-			// final move and sync
-			XMoveResizeWindow(dpy, win, x, y, window_width, window_height);
-			XCopyArea(dpy, drawable, win, xgc, 0, 0, window_width, window_height, 0, 0);
-			XSync(dpy, False);
-		} // dirty option
 	} // forever loop
 } // run
 
@@ -494,98 +272,6 @@ static void setup(char* font) {
 
 	// check signals for bad values
 	if(sigaction(SIGCHLD, &sa, NULL) == -1 || sigaction(SIGALRM, &sa, NULL) == -1) die("sigaction:");
-
-	// xlib and xft
-	// opens a new connection to the X server
-	dpy = XOpenDisplay(NULL);
-	if(!dpy) die("cannot open display");
-
-	// get the display connection number to the X server
-	xfd = ConnectionNumber(dpy);
-
-	// set screen and window
-	// can we get the other windows from this?
-	// get the default screen number for our display connection
-	// for a single screen app...
-	screen = DefaultScreen(dpy);
-
-	// debug get the total number of screens
-	int screencount = ScreenCount(dpy);
-	//printf("We find %i screens\n", screencount);
-
-	// gets the root window for our display connection (dpy)
-	// and the screen (monitor)
-	// returns a Window object
-	root = RootWindow(dpy, screen);
-
-	// display size
-	screen_width = DisplayWidth(dpy, screen);
-	screen_height = DisplayHeight(dpy, screen);
-
-	// looks like this sets our new display to the currently
-	// set options
-	XVisualInfo vi = {.screen = screen, .depth = depth, .class = TrueColor};
-	XMatchVisualInfo(dpy, screen, vi.depth, TrueColor, &vi);
-	Visual* visual = vi.visual;
-
-	// creates a new colormap
-	Colormap colormap = XCreateColormap(dpy, root, visual, None);
-	// dumb 1x1 drawable only to initialize xdraw
-	// I respect this comment, love a good hack
-	drawable = XCreatePixmap(dpy, root, 1, 1, vi.depth);
-	xdraw = XftDrawCreate(dpy, drawable, visual, colormap);
-	xfont = XftFontOpenName(dpy, screen, font);
-	if(!xfont) die("cannot load font");
-
-	// allocate colors for foreground and background
-	// TODO: use dedicated color variables instead of array
-	if(!XftColorAllocName(dpy, visual, colormap, colors[0], &xforeground)) die("cannot allocate foreground color");
-	if(!XftColorAllocName(dpy, visual, colormap, colors[1], &xbackground)) die("cannot allocate background color");
-
-	// alpha blending
-	xbackground.pixel &= 0x00FFFFFF;
-	unsigned char r = ((xbackground.pixel >> 16) & 0xff) * alpha;
-	unsigned char g = ((xbackground.pixel >> 8) & 0xff) * alpha;
-	unsigned char b = (xbackground.pixel & 0xff) * alpha;
-	xbackground.pixel = (r << 16) + (g << 8) + b;
-	xbackground.pixel |= (unsigned char)(0xff * alpha) << 24;
-
-	// window attributes
-	XSetWindowAttributes swa;
-	swa.override_redirect = True;
-	swa.background_pixel = xbackground.pixel;
-	swa.border_pixel = xbackground.pixel;
-	swa.colormap = colormap;
-	swa.event_mask = ExposureMask | ButtonPressMask;
-
-	// create our window
-	win = XCreateWindow(dpy,
-		root,
-		-1,
-		-1,
-		1,
-		1,
-		0,
-		vi.depth,
-		InputOutput,
-		visual,
-		CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWEventMask | CWColormap,
-		&swa);
-
-	// create a fixed region to allow passthrough
-	if(overlay) {
-		XRectangle rect;
-		XserverRegion region = XFixesCreateRegion(dpy, &rect, 1);
-		XFixesSetWindowShapeRegion(dpy, win, ShapeInput, 0, 0, region);
-		XFixesDestroyRegion(dpy, region);
-	}
-
-	// graphics context
-	XGCValues gcvalues = {0};
-	gcvalues.graphics_exposures = False;
-	xgc = XCreateGC(dpy, drawable, GCGraphicsExposures, &gcvalues);
-
-	XSelectInput(dpy, win, swa.event_mask);
 }
 
 static int parsegeom(char* b, char* prefix, char* suffix, struct g* g) {
@@ -643,6 +329,7 @@ int main(int argc, char* argv[]) {
 	char* xfont = font;
 
 	// check input arguments
+	// change to tclap
 	ARGBEGIN {
 	case 'V':
 		//version

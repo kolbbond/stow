@@ -1,33 +1,46 @@
 /* See LICENSE file for copyright and license details. */
+#pragma once
+#include <string>
+#include <array>
 
-static int borderpx = 0;
-static char font[] = "monospace:size=10";
 
-/* background opacity */
-static double alpha = 0.01;
-
+// global struct
+struct gs {
+	int value;
+	char prefix;
+	char suffix;
+};
 /* X window geometry */
 // assume 1920x1080?
-struct g px = {1920-700};
-struct g py = {20};
-struct g tx = {5};
-struct g ty = {10};
+struct GlobalConfig {
+	gs px;
+	gs py;
+	gs tx;
+	gs ty;
+	int borderpx;
+	double alpha = 0.01; // background opacity
+	char align;
+	std::string font;
+	std::array<std::string, 2> colors;
+	int period;
+	char delimeter;
+	bool window_on_top;
+};
 
-/* text alignment: l, r and c for left, right and centered respectively */
-static char align = 'l';
 
-/* foreground and background colors */
-//static char *colors[2] = { "#33ffd1", "#000000" };
-static char *colors[2] = { "#00bbbb", "#000000" };
-
-/* time in seconds between subcommand runs.
-0 will completely disable subcommand restarts and -1 will make them instant.
-in any case a click on a window will still immediately restart subcommand */
-static int period = 1;
+static struct GlobalConfig gconf = {.px = {1920 - 700},
+	.py = {20},
+	.tx = {5},
+	.ty = {10},
+	.borderpx = 1,
+	.alpha = 0.8, /* background opacity */
+	.align = 'l', /* text alignment: l, r and c for left, right and centered respectively */
+	.font = "monospace:size=10",
+	.colors = {"#00bbbb", "#0000ff"}, /* foreground and background colors */
+	.period = 1, /* time in seconds between subcommand runs. */
+	.delimeter = '\4',
+	.window_on_top = 1};
 
 /* delimeter string, encountered as a separate line in subcommand output
 signals stw to render buffered text and continue with next frame;
 it is the only valid use of non-printable characters in subcommand output */
-static char delimeter[] = "\4";
-
-static bool window_on_top = 1;
