@@ -18,6 +18,7 @@
 #include <memory>
 #include <iostream>
 #include <cstring>
+#include <sstream>
 
 #include "config.h"
 
@@ -168,8 +169,11 @@ public:
 
 	// draw to the screen
 	void draw(std::string text) {
-		printf("--- draw --- \n");
-		int len = text.size();
+		//printf("--- draw --- \n");
+		// copy string to char
+		int len = text.size(); //@hey: configure the new line?
+		char* ctext = new char[text.size() + 1];
+		std::strcpy(ctext, text.c_str());
 
 		// draw window
 		unsigned int prev_mw = _window_width;
@@ -180,17 +184,14 @@ public:
 		_window_width = 0;
 		_window_height = 0;
 
-		// copy string to char
-		// @hey: move to use string overall
-
-		char* ctext = new char[text.size() + 1];
-		std::strcpy(ctext, text.c_str());
-
-		for(char* line = ctext; line < ctext + len; line += strlen(line) + 1) {
+		// setup stream
+		std::istringstream stream(text);
+		std::string line;
+		while(std::getline(stream, line)) {
 
 			// X library glyph for each character?
 			XGlyphInfo ex;
-			XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)line, strlen(line), &ex);
+			XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)line.c_str(), line.size(), &ex);
 
 			// check we're onscreen
 			if(ex.xOff > _window_width) _window_width = ex.xOff;
@@ -226,11 +227,14 @@ public:
 		XFillRectangle(_dpy, _drawable, _xgc, 0, 0, _window_width, _window_height);
 
 		// render text lines
+		stream.clear();
+		stream.seekg(0, std::ios::beg);
 		unsigned int y = gconf.borderpx;
-		for(char* line = ctext; line < ctext + len; line += strlen(line) + 1) {
+		while(std::getline(stream, line)) {
+
 			// more glyphs ... ?
 			XGlyphInfo ex;
-			XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)line, strlen(line), &ex);
+			XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)line.c_str(), line.size(), &ex);
 
 			// text alignment
 			unsigned int x = gconf.borderpx;
@@ -241,16 +245,18 @@ public:
 			}
 
 			// X library draw function
-			XftDrawStringUtf8(_xdraw, &_xforeground, _xfont, x, y + _xfont->ascent, (unsigned char*)line, strlen(line));
+			XftDrawStringUtf8(
+				_xdraw, &_xforeground, _xfont, x, y + _xfont->ascent, (unsigned char*)line.c_str(), line.size());
 			y += _xfont->ascent + _xfont->descent;
 		}
+
 
 		// dont forget to delete!
 		delete[] ctext;
 	}
 
 	void run() {
-		std::printf("run!\n");
+		//std::printf("run!\n");
 
 		/*
 		// Process X events
@@ -309,17 +315,16 @@ public:
 			XMapWindow(_dpy, _win);
 
 			// set __window position
-			static int x = 1000;
-			static int y = 100;
-			bool use_config = false;
+			int x, y;
+			bool use_config = true;
 			if(use_config) {
-				int x = pos(gconf.px, _screen_width);
+				x = pos(gconf.px, _screen_width);
 				if(gconf.px.prefix == '-') {
 					x = _screen_width + x - _window_width;
 				}
 				x += pos(gconf.tx, _window_width);
 
-				int y = pos(gconf.py, _screen_height);
+				y = pos(gconf.py, _screen_height);
 				if(gconf.py.prefix == '-') {
 					y = _screen_height + y - _window_height;
 				}
