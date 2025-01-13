@@ -5,26 +5,24 @@ project(stow)
 # compile commands
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# output paths
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin CACHE PATH "" FORCE)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib CACHE PATH "" FORCE)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib CACHE PATH "" FORCE)
+
 # find relevant packages
 find_package(Freetype REQUIRED)
 find_package(X11 REQUIRED)
 
-# create a library here 
-
-# add test executable
-add_executable(test_xwindow test/test_xwindow.cpp)
-target_link_libraries(test_xwindow
+# add library
+add_library(stowlib INTERFACE)
+target_include_directories(stowlib INTERFACE include)
+target_link_libraries(stowlib INTERFACE
     freetype
     X11
     Xft
     Xext
     Xfixes
-    
-)
-
-target_include_directories(test_xwindow PUBLIC
-    include
-    ${FREETYPE_INCLUDE_DIRS}
     
 )
 
@@ -53,6 +51,10 @@ target_include_directories(stow PUBLIC
     
 )
 endif()
+
+# add test
+enable_testing()
+add_subdirectory(test)
 
 # install
 install(FILES ${CMAKE_BINARY_DIR}/stow 

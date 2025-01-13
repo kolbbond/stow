@@ -29,7 +29,6 @@ static size_t len;
 static size_t cap;
 static int spipe[2]; // pipe file descriptors [0],[1] for reading,writing
 
-
 static void signal_handler(int s) {
 	// dunno what this does
 	if(-1 == write(spipe[1], s == SIGCHLD ? "c" : "a", 1)) abort();
