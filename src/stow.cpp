@@ -259,7 +259,8 @@ static void run() {
 	} // forever loop
 } // run
 
-static void setup(char* font) {
+//static void setup(char* font) {
+static void setup() {
 	// self pipe and signal handler
 
 	// bad pipe
