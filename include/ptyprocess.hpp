@@ -17,6 +17,7 @@
 #include <cstring>
 #include <vector>
 #include <utmp.h>
+#include <algorithm>
 
 //#include "config.h"
 #include "process.hpp"
@@ -76,12 +77,21 @@ public:
 
 			// replace current process with cmd[0] with arguments cmd
 			// doesn't error check?
-			const char* pname = "stow pty";
-			char* const args[] = { (char*)pname, nullptr, nullptr };
-			execvp(cmd.c_str(), args);
+			const char* pname = std::string("stow pty: " + cmd).c_str();
+
+			// parse args and copy into cstr
+			//char* const cargs[] = { (char*)pname, nullptr, nullptr };
+			std::vector<char*> cargs = { (char*)pname };
+			std::transform(args.begin(), args.end(), std::back_inserter(cargs), [&](const std::string& s) {
+				char* pc = new char[s.size() + 1];
+				std::strcpy(pc, s.c_str());
+				return pc;
+			});
+			execvp(cmd.c_str(), cargs.data());
 
 			// delete args here?
-
+			for(size_t i = 0; i < cargs.size(); i++)
+				delete[] cargs[i];
 
 			// exits current process
 			exit(1);
