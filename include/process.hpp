@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <vector>
 
 #include "config.h"
 
@@ -76,6 +77,7 @@ public:
 	virtual void setup() = 0;
 
 	// start command
+	virtual void start_cmd(std::string cmd, std::vector<std::string> args) = 0;
 	virtual void start_cmd(std::string cmd) = 0;
 
 	// read output from file pipe

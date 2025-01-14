@@ -42,6 +42,10 @@ public:
 
 	// start command
 	void start_cmd(std::string cmd) override {
+		start_cmd(cmd, {});
+	}
+
+	void start_cmd(std::string cmd, std::vector<std::string> args) override {
 		// this code uses a lot of globals...
 		// what is pipefd?
 

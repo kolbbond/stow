@@ -15,6 +15,7 @@
 #include <pty.h>
 #include <sys/wait.h>
 #include <cstring>
+#include <vector>
 #include <utmp.h>
 
 //#include "config.h"
@@ -47,6 +48,9 @@ public:
 
 	// start command
 	void start_cmd(std::string cmd) override {
+		start_cmd(cmd, {});
+	};
+	void start_cmd(std::string cmd, std::vector<std::string> args) override {
 		// this code uses a lot of globals...
 		// what is pipefd?
 
@@ -54,10 +58,11 @@ public:
 		_cmdpid = fork();
 		switch(_cmdpid) {
 		// bad fork?
-		case -1:
+		case -1: {
 			printf("bad fork\n");
 			die("fork:");
-		case 0: // child process
+		}
+		case 0: { // child process
 			// new process (0 means success)
 			printf("open process\n");
 
@@ -71,15 +76,20 @@ public:
 
 			// replace current process with cmd[0] with arguments cmd
 			// doesn't error check?
-			// @hey: add args
-			execvp(cmd.c_str(), _cmd);
+			const char* pname = "stow pty";
+			char* const args[] = { (char*)pname, nullptr, nullptr };
+			execvp(cmd.c_str(), args);
+
+			// delete args here?
+
 
 			// exits current process
 			exit(1);
-
-		default:
+		}
+		default: {
 			// weird output
 			break;
+		}
 		}
 
 		// parent process
