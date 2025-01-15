@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "config.h"
+#include "xwindow.hpp"
 
 #define INITIAL_CAPACITY 2
 #define dprintf(...) printf(__VA_ARGS__)
@@ -81,5 +82,5 @@ public:
 	virtual void start_cmd(std::string cmd) = 0;
 
 	// read output from file pipe
-	virtual void read_text() = 0;
+	virtual void read_text(ShXWindowPr xwin = NULL) = 0;
 };

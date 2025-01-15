@@ -8,6 +8,7 @@ message(STATUS "configuring tests")
 set(test_list 
     test_xwindow.cpp
     test_process.cpp
+    test_stow.cpp
 )
 
 

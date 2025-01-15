@@ -29,18 +29,19 @@ struct GlobalConfig {
 
 
 // set desired values here
-static struct GlobalConfig gconf = {.px = {10},
-	.py = {20},
-	.tx = {100},
-	.ty = {10},
-	.borderpx = 2,
-	.alpha = 0.8, /* background opacity */
-	.align = 'l', /* text alignment: l, r and c for left, right and centered respectively */
-	.font = "monospace:size=10",
-	.colors = {"#00fbbb", "#0000ff"}, /* foreground and background colors */
-	.period = 1, /* time in seconds between subcommand runs. */
-	.delimeter = '\4',
-	.window_on_top = 1};
+static struct GlobalConfig gconf = //
+	{.px = {-1000},
+		.py = {20},
+		.tx = {100},
+		.ty = {10},
+		.borderpx = 2,
+		.alpha = 0.8, /* background opacity */
+		.align = 'l', /* text alignment: l, r and c for left, right and centered respectively */
+		.font = "monospace:size=10",
+		.colors = {"#00fbbb", "#0000ff"}, /* foreground and background colors */
+		.period = 1, /* time in seconds between subcommand runs. */
+		.delimeter = '\4',
+		.window_on_top = 1};
 
 /* delimeter string, encountered as a separate line in subcommand output
 signals stw to render buffered text and continue with next frame;

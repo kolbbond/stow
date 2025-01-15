@@ -101,7 +101,7 @@ public:
 	}
 
 	// read output from file pipe
-	void read_text() override {
+	void read_text(ShXWindowPr xwin=NULL) override {
 		static char delimeter[] = "\4";
 		//int dlen = strlen(gconf.delimeter);
 		int dlen = strlen(delimeter);

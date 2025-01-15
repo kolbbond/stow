@@ -21,6 +21,7 @@
 
 //#include "config.h"
 #include "process.hpp"
+#include "xwindow.hpp"
 
 typedef std::shared_ptr<class PTYProcess> ShPTYProcessPr;
 class PTYProcess: public Process {
@@ -51,6 +52,7 @@ public:
 	void start_cmd(std::string cmd) override {
 		start_cmd(cmd, {});
 	};
+
 	void start_cmd(std::string cmd, std::vector<std::string> args) override {
 		// this code uses a lot of globals...
 		// what is pipefd?
@@ -81,7 +83,7 @@ public:
 
 			// parse args and copy into cstr
 			//char* const cargs[] = { (char*)pname, nullptr, nullptr };
-			std::vector<char*> cargs = { (char*)pname };
+			std::vector<char*> cargs = {(char*)pname};
 			std::transform(args.begin(), args.end(), std::back_inserter(cargs), [&](const std::string& s) {
 				char* pc = new char[s.size() + 1];
 				std::strcpy(pc, s.c_str());
@@ -94,6 +96,7 @@ public:
 				delete[] cargs[i];
 
 			// exits current process
+            start_cmd(cmd,args);
 			exit(1);
 		}
 		default: {
@@ -109,7 +112,7 @@ public:
 	}
 
 	// read output from file pipe
-	void read_text() override {
+	void read_text(ShXWindowPr xwin = NULL) override {
 		static char delimeter[] = "\4";
 		//int dlen = strlen(gconf.delimeter);
 		int dlen = strlen(delimeter);
@@ -128,8 +131,13 @@ public:
 			if(bytes_read > 0) {
 				text[bytes_read] = '\0'; // null terminate
 				// debug printout
-				std::printf("%s", text);
-				std::flush(std::cout);
+				if(xwin != NULL) {
+					xwin->draw(text);
+					xwin->run();
+				} else {
+					std::printf("%s", text);
+					std::flush(std::cout);
+				}
 			} else if(bytes_read == 0) {
 				break; // eof
 			} else if(bytes_read == -1) {
