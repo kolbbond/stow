@@ -127,6 +127,7 @@ public:
 			// if we have bytes
 			if(bytes_read > 0) {
 				text[bytes_read] = '\0'; // null terminate
+				// debug printout
 				std::printf("%s", text);
 				std::flush(std::cout);
 			} else if(bytes_read == 0) {
