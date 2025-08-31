@@ -30,9 +30,9 @@ struct GlobalConfig {
 
 // set desired values here
 static struct GlobalConfig gconf = //
-	{.px = {-1000},
+	{.px = {-1600},
 		.py = {20},
-		.tx = {100},
+		.tx = {600},
 		.ty = {10},
 		.borderpx = 2,
 		.alpha = 0.8, /* background opacity */
