@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <X11/Xft/Xft.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/shape.h>
 
@@ -19,12 +20,18 @@
 #include <iostream>
 #include <cstring>
 #include <sstream>
+#include <unordered_map>
+#include <vector>
 
 #include "config.h"
 
 #include "error.hpp"
 
 typedef std::shared_ptr<class XWindow> ShXWindowPr;
+struct ColorSpan {
+	std::string text;
+	unsigned int rgb;
+};
 class XWindow {
 
 public:
@@ -39,6 +46,9 @@ public:
 	XftColor _xbackground;
 	XftFont* _xfont;
 	bool _dirty = true;
+	Visual* _visual = NULL;
+	Colormap _colormap = 0;
+	std::unordered_map<unsigned int, XftColor> _color_cache;
 
 	// x connection number
 	int _xfd;
@@ -51,6 +61,15 @@ public:
 	unsigned int _window_height;
 	bool _hidden = true;
 	bool _overlay = true;
+	bool _override_redirect = true;
+	bool _transparent_background = true;
+	bool _fullscreen = false;
+	bool _borderless = false;
+	bool _use_fixed_geometry = false;
+	int _fixed_x = 0;
+	int _fixed_y = 0;
+	unsigned int _fixed_w = 0;
+	unsigned int _fixed_h = 0;
 
 	// constructors
 	static ShXWindowPr create() {
@@ -65,10 +84,7 @@ public:
 		// opens a new connection to the X server
 		_dpy = XOpenDisplay(NULL);
 		if(!_dpy) {
-			// handle error
-
-			//die("cannot open display");
-			std::cerr << "cannot open display\n";
+			Error::die("cannot open display");
 		}
 
 		// get the display connection number to the X server
@@ -93,14 +109,20 @@ public:
 		_screen_width = DisplayWidth(_dpy, _screen);
 		_screen_height = DisplayHeight(_dpy, _screen);
 
-		// looks like this sets our new display to the currently
-		// set options
-		XVisualInfo vi = {.screen = _screen, .depth = _depth, .c_class = TrueColor};
-		XMatchVisualInfo(_dpy, _screen, vi.depth, TrueColor, &vi);
-		Visual* visual = vi.visual;
+		// choose a visual; fall back to default if ARGB depth is unavailable (common on XWayland/WSLg)
+		XVisualInfo vi = {};
+		Visual* visual = NULL;
+		if(XMatchVisualInfo(_dpy, _screen, _depth, TrueColor, &vi)) {
+			visual = vi.visual;
+		} else {
+			_depth = DefaultDepth(_dpy, _screen);
+			visual = DefaultVisual(_dpy, _screen);
+		}
+		_visual = visual;
 
 		// creates a new colormap
 		Colormap colormap = XCreateColormap(_dpy, _root, visual, None);
+		_colormap = colormap;
 		// dumb 1x1 drawable only to initialize xdraw
 		// I respect this comment, love a good hack
 		_drawable = XCreatePixmap(_dpy, _root, 1, 1, vi.depth);
@@ -119,17 +141,19 @@ public:
 			Error::die("cannot allocate background color");
 		}
 
-		// alpha blending
-		_xbackground.pixel &= 0x00FFFFFF;
-		unsigned char r = ((_xbackground.pixel >> 16) & 0xff) * gconf.alpha;
-		unsigned char g = ((_xbackground.pixel >> 8) & 0xff) * gconf.alpha;
-		unsigned char b = (_xbackground.pixel & 0xff) * gconf.alpha;
-		_xbackground.pixel = (r << 16) + (g << 8) + b;
-		_xbackground.pixel |= (unsigned char)(0xff * gconf.alpha) << 24;
+		// alpha blending (only valid on 32-bit visuals)
+		if(_depth == 32) {
+			_xbackground.pixel &= 0x00FFFFFF;
+			unsigned char r = ((_xbackground.pixel >> 16) & 0xff) * gconf.alpha;
+			unsigned char g = ((_xbackground.pixel >> 8) & 0xff) * gconf.alpha;
+			unsigned char b = (_xbackground.pixel & 0xff) * gconf.alpha;
+			_xbackground.pixel = (r << 16) + (g << 8) + b;
+			_xbackground.pixel |= (unsigned char)(0xff * gconf.alpha) << 24;
+		}
 
 		// window attributes
 		XSetWindowAttributes swa;
-		swa.override_redirect = True;
+		swa.override_redirect = _override_redirect ? True : False;
 		swa.background_pixel = _xbackground.pixel;
 		swa.border_pixel = _xbackground.pixel;
 		swa.colormap = colormap;
@@ -149,12 +173,25 @@ public:
 			CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWEventMask | CWColormap,
 			&swa);
 
+		// overall window opacity for compositing WMs (works on WSLg/XWayland)
+		if(gconf.alpha < 1.0) {
+			unsigned long opacity = (unsigned long)(0xFFFFFFFFu * gconf.alpha);
+			Atom opacity_atom = XInternAtom(_dpy, "_NET_WM_WINDOW_OPACITY", False);
+			XChangeProperty(_dpy, _win, opacity_atom, XA_CARDINAL, 32, PropModeReplace,
+				reinterpret_cast<unsigned char*>(&opacity), 1);
+		}
+
 		// create a fixed region to allow passthrough
 		if(_overlay) {
-			XRectangle rect;
-			XserverRegion region = XFixesCreateRegion(_dpy, &rect, 1);
-			XFixesSetWindowShapeRegion(_dpy, _win, ShapeInput, 0, 0, region);
-			XFixesDestroyRegion(_dpy, region);
+			int xfixes_event = 0;
+			int xfixes_error = 0;
+			if(XFixesQueryExtension(_dpy, &xfixes_event, &xfixes_error)) {
+				XserverRegion region = XFixesCreateRegion(_dpy, NULL, 0);
+				XFixesSetWindowShapeRegion(_dpy, _win, ShapeInput, 0, 0, region);
+				XFixesDestroyRegion(_dpy, region);
+			} else {
+				_overlay = false;
+			}
 		}
 
 		// graphics context
@@ -178,6 +215,7 @@ public:
 		// draw window
 		unsigned int prev_mw = _window_width;
 		unsigned int prev_mh = _window_height;
+		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
 
 		// find maximum text line width and height (does this not draw?
 		// @hey: seems like we do this loop twice, here and below
@@ -199,17 +237,27 @@ public:
 		}
 
 		// hidden is a zero size _window ...
-		_hidden = _window_width == 0 || _window_height == 0;
-		if(_hidden) {
-			printf("0 size _window = hidden\n");
+		if(_use_fixed_geometry) {
+			_hidden = false;
+			_window_width = _fixed_w;
+			_window_height = _fixed_h;
+		} else if(_fullscreen) {
+			_hidden = false;
+			_window_width = _screen_width;
+			_window_height = _screen_height;
+		} else {
+			_hidden = _window_width == 0 || _window_height == 0;
+			if(_hidden) {
+				printf("0 size _window = hidden\n");
 
-			// @hey: delete ctext here too?
-			return;
+				// @hey: delete ctext here too?
+				return;
+			}
+
+			// add border to _window sizes
+			_window_width += borderpx * 2;
+			_window_height += borderpx * 2;
 		}
-
-		// add border to _window sizes
-		_window_width += gconf.borderpx * 2;
-		_window_height += gconf.borderpx * 2;
 
 		// why would the _window sizes change here? @hey
 		if(_window_width != prev_mw || _window_height != prev_mh) {
@@ -223,13 +271,17 @@ public:
 		}
 
 		//printf("setting stow foreground\n");
-		XSetForeground(_dpy, _xgc, _xbackground.pixel);
+		unsigned long clear_pixel = _xbackground.pixel;
+		if(_transparent_background && _depth == 32) {
+			clear_pixel = 0x00000000;
+		}
+		XSetForeground(_dpy, _xgc, clear_pixel);
 		XFillRectangle(_dpy, _drawable, _xgc, 0, 0, _window_width, _window_height);
 
 		// render text lines
 		stream.clear();
 		stream.seekg(0, std::ios::beg);
-		unsigned int y = gconf.borderpx;
+		unsigned int y = borderpx;
 		while(std::getline(stream, line)) {
 
 			// more glyphs ... ?
@@ -237,7 +289,7 @@ public:
 			XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)line.c_str(), line.size(), &ex);
 
 			// text alignment
-			unsigned int x = gconf.borderpx;
+			unsigned int x = borderpx;
 			if(gconf.align == 'r') {
 				x = _window_width - ex.xOff;
 			} else if(gconf.align == 'c') {
@@ -253,6 +305,188 @@ public:
 
 		// dont forget to delete!
 		delete[] ctext;
+	}
+
+	// draw text clipped to a region in the window
+	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) {
+		unsigned int prev_mw = _window_width;
+		unsigned int prev_mh = _window_height;
+		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
+
+		if(_use_fixed_geometry) {
+			_hidden = false;
+			_window_width = _fixed_w;
+			_window_height = _fixed_h;
+		} else if(_fullscreen) {
+			_hidden = false;
+			_window_width = _screen_width;
+			_window_height = _screen_height;
+		} else {
+			_hidden = false;
+			_window_width = rw;
+			_window_height = rh;
+		}
+
+		if(_window_width != prev_mw || _window_height != prev_mh) {
+			XFreePixmap(_dpy, _drawable);
+			_drawable = XCreatePixmap(_dpy, _root, _window_width, _window_height, _depth);
+			if(!_drawable) Error::die("cannot allocate drawable");
+			XftDrawChange(_xdraw, _drawable);
+		}
+
+		unsigned long clear_pixel = _xbackground.pixel;
+		if(_transparent_background && _depth == 32) {
+			clear_pixel = 0x00000000;
+		}
+
+		XRectangle rect;
+		rect.x = rx;
+		rect.y = ry;
+		rect.width = rw;
+		rect.height = rh;
+		XSetClipRectangles(_dpy, _xgc, 0, 0, &rect, 1, Unsorted);
+		XftDrawSetClipRectangles(_xdraw, 0, 0, &rect, 1);
+
+		XSetForeground(_dpy, _xgc, clear_pixel);
+		XFillRectangle(_dpy, _drawable, _xgc, rx, ry, rw, rh);
+
+		std::istringstream stream(text);
+		std::string line;
+		unsigned int y = ry + borderpx;
+		while(std::getline(stream, line)) {
+			XGlyphInfo ex;
+			XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)line.c_str(), line.size(), &ex);
+
+			unsigned int x = rx + borderpx;
+			if(gconf.align == 'r') {
+				if(ex.xOff < rw) x = rx + (rw - ex.xOff);
+			} else if(gconf.align == 'c') {
+				if(ex.xOff < rw) x = rx + (rw - ex.xOff) / 2;
+			}
+
+			if(y + _xfont->ascent + _xfont->descent > ry + rh) break;
+			XftDrawStringUtf8(_xdraw, &_xforeground, _xfont, x, y + _xfont->ascent,
+				(unsigned char*)line.c_str(), line.size());
+			y += _xfont->ascent + _xfont->descent;
+		}
+
+		XSetClipMask(_dpy, _xgc, None);
+		XftDrawSetClip(_xdraw, NULL);
+	}
+
+	XftColor* get_color(unsigned int rgb) {
+		auto it = _color_cache.find(rgb);
+		if(it != _color_cache.end()) {
+			return &it->second;
+		}
+		XRenderColor rc;
+		rc.red = ((rgb >> 16) & 0xff) * 257;
+		rc.green = ((rgb >> 8) & 0xff) * 257;
+		rc.blue = (rgb & 0xff) * 257;
+		rc.alpha = 0xffff;
+		XftColor color;
+		if(!XftColorAllocValue(_dpy, _visual, _colormap, &rc, &color)) {
+			return &_xforeground;
+		}
+		auto res = _color_cache.emplace(rgb, color);
+		return &res.first->second;
+	}
+
+	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) {
+		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
+		unsigned int rw = 0;
+		unsigned int rh = 0;
+		for(size_t i = 0; i < lines.size(); i++) {
+			int line_width = 0;
+			for(const ColorSpan& sp : lines[i]) {
+				XGlyphInfo ex;
+				XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)sp.text.c_str(), sp.text.size(), &ex);
+				line_width += ex.xOff;
+			}
+			if(static_cast<unsigned int>(line_width) > rw) rw = line_width;
+			rh += _xfont->ascent + _xfont->descent;
+		}
+		rw += borderpx * 2;
+		rh += borderpx * 2;
+		draw_region_spans(lines, 0, 0, rw, rh);
+	}
+
+	void draw_region_spans(const std::vector<std::vector<ColorSpan>>& lines, int rx, int ry,
+		unsigned int rw, unsigned int rh) {
+		unsigned int prev_mw = _window_width;
+		unsigned int prev_mh = _window_height;
+		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
+
+		if(_use_fixed_geometry) {
+			_hidden = false;
+			_window_width = _fixed_w;
+			_window_height = _fixed_h;
+		} else if(_fullscreen) {
+			_hidden = false;
+			_window_width = _screen_width;
+			_window_height = _screen_height;
+		} else {
+			_hidden = false;
+			_window_width = rw;
+			_window_height = rh;
+		}
+
+		if(_window_width != prev_mw || _window_height != prev_mh) {
+			XFreePixmap(_dpy, _drawable);
+			_drawable = XCreatePixmap(_dpy, _root, _window_width, _window_height, _depth);
+			if(!_drawable) Error::die("cannot allocate drawable");
+			XftDrawChange(_xdraw, _drawable);
+		}
+
+		unsigned long clear_pixel = _xbackground.pixel;
+		if(_transparent_background && _depth == 32) {
+			clear_pixel = 0x00000000;
+		}
+
+		XRectangle rect;
+		rect.x = rx;
+		rect.y = ry;
+		rect.width = rw;
+		rect.height = rh;
+		XSetClipRectangles(_dpy, _xgc, 0, 0, &rect, 1, Unsorted);
+		XftDrawSetClipRectangles(_xdraw, 0, 0, &rect, 1);
+
+		XSetForeground(_dpy, _xgc, clear_pixel);
+		XFillRectangle(_dpy, _drawable, _xgc, rx, ry, rw, rh);
+
+		unsigned int y = ry + borderpx;
+		for(size_t i = 0; i < lines.size(); i++) {
+			const std::vector<ColorSpan>& spans = lines[i];
+			int line_width = 0;
+			for(const ColorSpan& sp : spans) {
+				XGlyphInfo ex;
+				XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)sp.text.c_str(), sp.text.size(), &ex);
+				line_width += ex.xOff;
+			}
+
+			unsigned int x = rx + borderpx;
+			if(gconf.align == 'r') {
+				if(line_width < static_cast<int>(rw)) x = rx + (rw - line_width);
+			} else if(gconf.align == 'c') {
+				if(line_width < static_cast<int>(rw)) x = rx + (rw - line_width) / 2;
+			}
+
+			for(const ColorSpan& sp : spans) {
+				if(sp.text.empty()) continue;
+				XftColor* c = get_color(sp.rgb);
+				XftDrawStringUtf8(_xdraw, c, _xfont, x, y + _xfont->ascent,
+					(unsigned char*)sp.text.c_str(), sp.text.size());
+				XGlyphInfo ex;
+				XftTextExtentsUtf8(_dpy, _xfont, (unsigned char*)sp.text.c_str(), sp.text.size(), &ex);
+				x += ex.xOff;
+			}
+
+			y += _xfont->ascent + _xfont->descent;
+			if(y > ry + rh) break;
+		}
+
+		XSetClipMask(_dpy, _xgc, None);
+		XftDrawSetClip(_xdraw, NULL);
 	}
 
 	void run() {
@@ -317,7 +551,13 @@ public:
 			// set __window position
 			int x, y;
 			bool use_config = true;
-			if(use_config) {
+			if(_use_fixed_geometry) {
+				x = _fixed_x;
+				y = _fixed_y;
+			} else if(_fullscreen) {
+				x = 0;
+				y = 0;
+			} else if(use_config) {
 				x = pos(gconf.px, _screen_width);
 				if(gconf.px.prefix == '-') {
 					x = _screen_width + x - _window_width;

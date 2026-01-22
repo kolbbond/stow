@@ -9,6 +9,8 @@ set(test_list
     test_xwindow.cpp
     test_process.cpp
     test_stow.cpp
+    test_fullscreen.cpp
+    test_grid.cpp
 )
 
 
@@ -37,4 +39,3 @@ target_include_directories(${name} PUBLIC
 endforeach()
 
 message(STATUS "end of test creation")
-

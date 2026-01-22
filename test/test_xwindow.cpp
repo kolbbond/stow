@@ -1,6 +1,11 @@
 // test xwindow
 #include "xwindow.hpp"
 
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+
 std::string teststr =
 	"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus luctus urna sed urna ultricies ac tempor dui \n"
 	"sagittis. In condimentum facilisis porta. Sed nec diam eu diam mattis viverra. Nulla fringilla, orci ac euismod\n"
@@ -21,9 +26,29 @@ std::string teststr =
 	"mollis, feugiat turpis a,			ullamcorper arcu.Aliquam erat volutpat.Nam congue, nisi ut sodales suscipit, \n"
 	"eros odio tristique leo,AAtae condimentum risus arcu at enim.Nulla facilisi.\0";
 
+static std::string format_time_now() {
+	std::time_t now = std::time(nullptr);
+	std::tm* local = std::localtime(&now);
+	char buf[32];
+	if(local && std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", local)) {
+		return std::string(buf);
+	}
+	return "unknown";
+}
+
 int main() {
+	// keep the test window on-screen regardless of desktop size
+	gconf.px = {10, 0, 0};
+	gconf.py = {10, 0, 0};
+	gconf.tx = {0, 0, 0};
+	gconf.ty = {0, 0, 0};
+
 	// create
 	ShXWindowPr xwin = XWindow::create();
+	// WSLg/XWayland may not show override-redirect windows reliably
+	xwin->_overlay = true; // click-through via empty input region
+	xwin->_override_redirect = false; // WM-managed so it stays visible
+	xwin->_transparent_background = true;
 
 	// setup window -> what do we need to pass into it
 	xwin->setup();
@@ -31,11 +56,40 @@ int main() {
 	// draw
 	bool done = false;
 	int cnt = 0;
+	int frames = 0;
+	double fps = 0.0;
+	auto last_fps = std::chrono::steady_clock::now();
 	while(!done) {
-		// test dynamic string
-		teststr = "counter: " + std::to_string(cnt++) + "\n";
+		frames++;
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed = std::chrono::duration<double>(now - last_fps).count();
+		if(elapsed >= 1.0) {
+			fps = frames / elapsed;
+			frames = 0;
+			last_fps = now;
+		}
 
-		xwin->draw(teststr);
+		int mouse_x = 0;
+		int mouse_y = 0;
+		Window root = 0;
+		Window child = 0;
+		int win_x = 0;
+		int win_y = 0;
+		unsigned int mask = 0;
+		if(XQueryPointer(xwin->_dpy, xwin->_root, &root, &child,
+			   &mouse_x, &mouse_y, &win_x, &win_y, &mask) == False) {
+			mouse_x = 0;
+			mouse_y = 0;
+		}
+
+		std::ostringstream hud;
+		hud << std::fixed << std::setprecision(1);
+		hud << "fps: " << fps << "\n";
+		hud << "mouse: " << mouse_x << "," << mouse_y << "\n";
+		hud << "time: " << format_time_now() << "\n";
+		hud << "frame: " << cnt++ << "\n";
+
+		xwin->draw(hud.str());
 		xwin->run();
 	}
 }

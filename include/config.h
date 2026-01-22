@@ -25,6 +25,7 @@ struct GlobalConfig {
 	int period;
 	char delimeter;
 	bool window_on_top;
+	bool borderless;
 };
 
 
@@ -41,7 +42,8 @@ static struct GlobalConfig gconf = //
 		.colors = {"#00fbbb", "#0000ff"}, /* foreground and background colors */
 		.period = 1, /* time in seconds between subcommand runs. */
 		.delimeter = '\4',
-		.window_on_top = 1};
+		.window_on_top = 1,
+		.borderless = 0};
 
 /* delimeter string, encountered as a separate line in subcommand output
 signals stw to render buffered text and continue with next frame;
