@@ -1,6 +1,13 @@
-// test start a separate process
+// test start a separate process - cross-platform
+#include "platform.hpp"
+
+#if STOW_POSIX
 #include "pipeprocess.hpp"
 #include "ptyprocess.hpp"
+#elif STOW_WINDOWS
+#include "win32pipeprocess.hpp"
+#include "win32ptyprocess.hpp"
+#endif
 
 int main(int argc, char** argv) {
 
@@ -19,9 +26,13 @@ int main(int argc, char** argv) {
 	if(cmd.empty()) std::cerr << "input cmd";
 
 	// fire process for cmdline input
+#if STOW_POSIX
 	ShProcessPr process = PTYProcess::create();
+#elif STOW_WINDOWS
+	ShProcessPr process = Win32PTYProcess::create();
+#endif
 	process->setup();
-	process->start_cmd(cmd,args);
+	process->start_cmd(cmd, args);
 	process->read_text();
 
 	// check process

@@ -1,4 +1,8 @@
-// grid runner: split screen into cells and run commands serially
+// grid runner: split screen into cells and run commands serially - POSIX/X11 only
+#include "platform.hpp"
+
+#if STOW_POSIX
+
 #include "ptyprocess.hpp"
 #include "xwindow.hpp"
 
@@ -479,3 +483,14 @@ int main(int argc, char** argv) {
 		}
 	}
 }
+
+#else // STOW_WINDOWS
+
+#include <iostream>
+
+int main() {
+	std::cout << "test_grid is only available on POSIX/X11 platforms\n";
+	return 0;
+}
+
+#endif // STOW_POSIX

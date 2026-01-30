@@ -1,4 +1,8 @@
-// test fullscreen xwindow
+// test fullscreen xwindow - POSIX/X11 only
+#include "platform.hpp"
+
+#if STOW_POSIX
+
 #include "xwindow.hpp"
 
 int main() {
@@ -26,3 +30,14 @@ int main() {
 		xwin->run();
 	}
 }
+
+#else // STOW_WINDOWS
+
+#include <iostream>
+
+int main() {
+	std::cout << "test_fullscreen is only available on POSIX/X11 platforms\n";
+	return 0;
+}
+
+#endif // STOW_POSIX

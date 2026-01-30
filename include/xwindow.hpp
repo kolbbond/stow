@@ -1,9 +1,12 @@
-// handle xwindow instance
+// X11 Window implementation for Linux/POSIX
 #pragma once
+
+#include "platform.hpp"
+
+#if STOW_POSIX
 
 #include <limits.h>
 #include <poll.h>
-//#include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -24,52 +27,33 @@
 #include <vector>
 
 #include "config.h"
-
+#include "color_span.hpp"
 #include "error.hpp"
+#include "window.hpp"
 
 typedef std::shared_ptr<class XWindow> ShXWindowPr;
-struct ColorSpan {
-	std::string text;
-	unsigned int rgb;
-};
-class XWindow {
 
+class XWindow : public StowWindow {
 public:
 	// x instance
 	// xlib and xft
-	Display* _dpy;
-	Window _win;
-	Window _root;
-	Drawable _drawable;
-	XftDraw* _xdraw;
+	Display* _dpy = nullptr;
+	Window _win = 0;
+	Window _root = 0;
+	Drawable _drawable = 0;
+	XftDraw* _xdraw = nullptr;
 	XftColor _xforeground;
 	XftColor _xbackground;
-	XftFont* _xfont;
-	bool _dirty = true;
-	Visual* _visual = NULL;
+	XftFont* _xfont = nullptr;
+	Visual* _visual = nullptr;
 	Colormap _colormap = 0;
 	std::unordered_map<unsigned int, XftColor> _color_cache;
 
 	// x connection number
-	int _xfd;
-	int _screen;
+	int _xfd = 0;
+	int _screen = 0;
 	int _depth = 32;
-	GC _xgc;
-	unsigned int _screen_width;
-	unsigned int _screen_height;
-	unsigned int _window_width;
-	unsigned int _window_height;
-	bool _hidden = true;
-	bool _overlay = true;
-	bool _override_redirect = true;
-	bool _transparent_background = true;
-	bool _fullscreen = false;
-	bool _borderless = false;
-	bool _use_fixed_geometry = false;
-	int _fixed_x = 0;
-	int _fixed_y = 0;
-	unsigned int _fixed_w = 0;
-	unsigned int _fixed_h = 0;
+	GC _xgc = nullptr;
 
 	// constructors
 	static ShXWindowPr create() {
@@ -77,7 +61,7 @@ public:
 	}
 
 
-	void setup() {
+	void setup() override {
 		std::printf("--- setup XWindow ---\n");
 
 		// xlib and xft
@@ -99,6 +83,7 @@ public:
 		// debug get the total number of _screens
 		int _screencount = ScreenCount(_dpy);
 		//printf("We find %i _screens\n", _screencount);
+		(void)_screencount;
 
 		// gets the root window for our display connection (_dpy)
 		// and the _screen (monitor)
@@ -205,12 +190,8 @@ public:
 	}
 
 	// draw to the screen
-	void draw(std::string text) {
+	void draw(const std::string& text) override {
 		//printf("--- draw --- \n");
-		// copy string to char
-		int len = text.size(); //@hey: configure the new line?
-		char* ctext = new char[text.size() + 1];
-		std::strcpy(ctext, text.c_str());
 
 		// draw window
 		unsigned int prev_mw = _window_width;
@@ -249,8 +230,6 @@ public:
 			_hidden = _window_width == 0 || _window_height == 0;
 			if(_hidden) {
 				printf("0 size _window = hidden\n");
-
-				// @hey: delete ctext here too?
 				return;
 			}
 
@@ -301,14 +280,10 @@ public:
 				_xdraw, &_xforeground, _xfont, x, y + _xfont->ascent, (unsigned char*)line.c_str(), line.size());
 			y += _xfont->ascent + _xfont->descent;
 		}
-
-
-		// dont forget to delete!
-		delete[] ctext;
 	}
 
 	// draw text clipped to a region in the window
-	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) {
+	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) override {
 		unsigned int prev_mw = _window_width;
 		unsigned int prev_mh = _window_height;
 		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
@@ -392,7 +367,7 @@ public:
 		return &res.first->second;
 	}
 
-	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) {
+	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) override {
 		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
 		unsigned int rw = 0;
 		unsigned int rh = 0;
@@ -412,7 +387,7 @@ public:
 	}
 
 	void draw_region_spans(const std::vector<std::vector<ColorSpan>>& lines, int rx, int ry,
-		unsigned int rw, unsigned int rh) {
+		unsigned int rw, unsigned int rh) override {
 		unsigned int prev_mw = _window_width;
 		unsigned int prev_mh = _window_height;
 		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
@@ -489,7 +464,7 @@ public:
 		XftDrawSetClip(_xdraw, NULL);
 	}
 
-	void run() {
+	void run() override {
 		//std::printf("run!\n");
 
 		/*
@@ -592,3 +567,10 @@ public:
 		}
 	}
 };
+
+// Factory implementation for POSIX
+inline ShWindowPtr StowWindow::create() {
+	return std::static_pointer_cast<StowWindow>(XWindow::create());
+}
+
+#endif // STOW_POSIX

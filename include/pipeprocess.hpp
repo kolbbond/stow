@@ -1,5 +1,9 @@
-// pipe process
+// pipe process - POSIX implementation
 #pragma once
+
+#include "platform.hpp"
+
+#if STOW_POSIX
 
 #include <iostream>
 #include <csignal>
@@ -46,6 +50,8 @@ public:
 	}
 
 	void start_cmd(std::string cmd, std::vector<std::string> args) override {
+		(void)args; // unused in this implementation
+
 		// this code uses a lot of globals...
 		// what is pipefd?
 
@@ -101,19 +107,20 @@ public:
 	}
 
 	// read output from file pipe
-	void read_text(ShXWindowPr xwin=NULL) override {
+	void read_text(ShWindowPtr win = nullptr) override {
+		(void)win; // unused in pipe process
 		static char delimeter[] = "\4";
 		//int dlen = strlen(gconf.delimeter);
 		int dlen = strlen(delimeter);
-		static char* text;
-		static size_t cap;
+		static char* text = nullptr;
+		static size_t cap = 0;
 
 		dprintf("read_text\n");
 
 		// read from pipe
 		int len = 0;
 		for(;;) {
-			if(len + dlen + 2 > cap) {
+			if(len + dlen + 2 > (int)cap) {
 				// buffer must have sufficient capacity to
 				// store delimeter string, \n and \0 in one read
 				cap = cap ? cap * 2 : INITIAL_CAPACITY;
@@ -151,3 +158,5 @@ public:
 		}
 	}
 };
+
+#endif // STOW_POSIX
