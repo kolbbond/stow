@@ -13,8 +13,11 @@
 #include <unistd.h>
 #include <vector>
 
-#include "config.h"
-#include "xwindow.hpp"
+#include "stow/config.hpp"
+
+// Forward declaration to avoid circular dependency
+class XWindow;
+typedef std::shared_ptr<XWindow> ShXWindowPr;
 
 #define INITIAL_CAPACITY 2
 #define dprintf(...) printf(__VA_ARGS__)
@@ -22,7 +25,9 @@
 typedef std::shared_ptr<class Process> ShProcessPr;
 class Process {
 public:
-	// properties
+	// Configuration
+	stow::ProcessConfig _config;
+
 	// file pointer
 	FILE* _inputf;
 
@@ -39,9 +44,10 @@ public:
 	// methods
 	Process() {};
 	virtual ~Process() {};
-	//	static ShProcessPr create() {
-	//		return std::make_shared<class Process>();
-	//	}
+
+	void set_config(const stow::ProcessConfig& config) {
+		_config = config;
+	}
 
 	__attribute__((noreturn)) static void die(const char* fmt, ...) {
 		int tmp = errno;
@@ -63,13 +69,12 @@ public:
 	}
 
 	static void signal_handler(int signal) {
-		//if(-1 == write(_spipe[1], s == SIGCHLD ? "c" : "a", 1)) abort();
 		if(signal == SIGINT) {
 			std::cout << "SIGINT received...\n";
 		} else if(signal == SIGTERM) {
-			std::cout << "SIGINT received...\n";
+			std::cout << "SIGTERM received...\n";
 		} else if(signal == SIGCHLD) {
-			std::cout << "SIGINT received...\n";
+			std::cout << "SIGCHLD received...\n";
 		}
 	}
 

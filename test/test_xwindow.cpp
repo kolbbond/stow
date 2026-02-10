@@ -1,4 +1,5 @@
 // test xwindow
+#include "stow/config.hpp"
 #include "xwindow.hpp"
 
 #include <chrono>
@@ -37,49 +38,46 @@ static std::string format_time_now() {
 }
 
 int main() {
-	// keep the test window on-screen regardless of desktop size
-	gconf.px = {10, 0, 0};
-	gconf.py = {10, 0, 0};
-	gconf.tx = {0, 0, 0};
-	gconf.ty = {0, 0, 0};
+	// Create window config
+	stow::WindowConfig cfg;
+	cfg.px = stow::Position(10);
+	cfg.py = stow::Position(10);
+	cfg.overlay = true;
+	cfg.alpha = 0.8;
 
-	// create
-	ShXWindowPr xwin = XWindow::create();
-	// WSLg/XWayland may not show override-redirect windows reliably
-	xwin->_overlay = true; // click-through via empty input region
-	xwin->_override_redirect = false; // WM-managed so it stays visible
-	xwin->_transparent_background = true;
-
-	// setup window -> what do we need to pass into it
+	// Create window with config
+	ShXWindowPr xwin = XWindow::create(cfg);
 	xwin->setup();
 
-	// draw
-	bool done = false;
+	// run for limited time (test timeout)
+	auto start = std::chrono::steady_clock::now();
+	constexpr double timeout_sec = 3.0;
+
 	int cnt = 0;
 	int frames = 0;
 	double fps = 0.0;
 	auto last_fps = std::chrono::steady_clock::now();
-	while(!done) {
-		frames++;
+
+	while (true) {
 		auto now = std::chrono::steady_clock::now();
+		auto total_elapsed = std::chrono::duration<double>(now - start).count();
+		if (total_elapsed >= timeout_sec) break;
+
+		frames++;
 		auto elapsed = std::chrono::duration<double>(now - last_fps).count();
-		if(elapsed >= 1.0) {
+		if (elapsed >= 1.0) {
 			fps = frames / elapsed;
 			frames = 0;
 			last_fps = now;
 		}
 
-		int mouse_x = 0;
-		int mouse_y = 0;
-		Window root = 0;
-		Window child = 0;
-		int win_x = 0;
-		int win_y = 0;
+		int mouse_x = 0, mouse_y = 0;
+		Window root = 0, child = 0;
+		int win_x = 0, win_y = 0;
 		unsigned int mask = 0;
-		if(XQueryPointer(xwin->_dpy, xwin->_root, &root, &child,
-			   &mouse_x, &mouse_y, &win_x, &win_y, &mask) == False) {
-			mouse_x = 0;
-			mouse_y = 0;
+		if (XQueryPointer(xwin->_dpy, xwin->_root, &root, &child,
+				&mouse_x, &mouse_y, &win_x, &win_y, &mask) == False) {
+			mouse_x = mouse_y = 0;
 		}
 
 		std::ostringstream hud;
@@ -92,4 +90,6 @@ int main() {
 		xwin->draw(hud.str());
 		xwin->run();
 	}
+
+	return 0;
 }

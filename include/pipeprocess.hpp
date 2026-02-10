@@ -12,7 +12,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "config.h"
 #include "process.hpp"
 
 typedef std::shared_ptr<class PipeProcess> ShPipeProcessPr;
@@ -23,6 +22,12 @@ public:
 	~PipeProcess() {};
 	static ShPipeProcessPr create() {
 		return std::make_shared<class PipeProcess>();
+	}
+
+	static ShPipeProcessPr create(const stow::ProcessConfig& config) {
+		auto proc = std::make_shared<class PipeProcess>();
+		proc->set_config(config);
+		return proc;
 	}
 
 	void setup() override {
@@ -46,9 +51,6 @@ public:
 	}
 
 	void start_cmd(std::string cmd, std::vector<std::string> args) override {
-		// this code uses a lot of globals...
-		// what is pipefd?
-
 		// check pipe exists and is good
 		if(-1 == pipe(_pipefd)) die("pipe:");
 
@@ -64,15 +66,9 @@ public:
 			printf("bad fork\n");
 			die("fork:");
 		case 0: // child process
-			// new process (0 means success)
-			printf("open process\n");
-
 			// close old file descriptors
 			close(_spipe[0]);
 			close(_spipe[1]);
-
-			// close x server connection number @hey: need crosstalk
-			//close(xfd);
 
 			// close newest (read pipe)
 			close(_pipefd[0]);
@@ -84,8 +80,6 @@ public:
 			setpgid(0, 0);
 
 			// replace current process with cmd[0] with arguments cmd
-			// doesn't error check?
-			// @hey: add args
 			execvp(cmd.c_str(), _cmd);
 
 			// exits current process
@@ -102,9 +96,8 @@ public:
 
 	// read output from file pipe
 	void read_text(ShXWindowPr xwin=NULL) override {
-		static char delimeter[] = "\4";
-		//int dlen = strlen(gconf.delimeter);
-		int dlen = strlen(delimeter);
+		char delimiter = _config.delimiter;
+		int dlen = 1;
 		static char* text;
 		static size_t cap;
 
@@ -113,7 +106,7 @@ public:
 		// read from pipe
 		int len = 0;
 		for(;;) {
-			if(len + dlen + 2 > cap) {
+			if(len + dlen + 2 > static_cast<int>(cap)) {
 				// buffer must have sufficient capacity to
 				// store delimeter string, \n and \0 in one read
 				cap = cap ? cap * 2 : INITIAL_CAPACITY;
@@ -131,7 +124,6 @@ public:
 				} else {
 					die("fgets subcommand output:");
 				}
-				//dprintf("%s", line);
 			}
 			dprintf("%s", line);
 
@@ -144,7 +136,7 @@ public:
 				len += llen;
 			}
 
-			if(llen == dlen && strcmp(line, delimeter) == 0) {
+			if(llen == dlen && line[0] == delimiter) {
 				len -= dlen + 2;
 				break;
 			}

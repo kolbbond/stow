@@ -1,54 +1,50 @@
-// combined x window and process
+// test stow functionality - runs a command and exits after timeout
+#include "stow/config.hpp"
 #include "pipeprocess.hpp"
 #include "ptyprocess.hpp"
 #include "xwindow.hpp"
 
+#include <chrono>
 #include <unistd.h>
 
-int main(int argc, char** argv) {
+int main() {
+	// Create window config
+	stow::WindowConfig win_cfg;
+	win_cfg.px = stow::Position(10);
+	win_cfg.py = stow::Position(10);
+	win_cfg.overlay = true;
 
-	// parse cmdline input
-	std::string cmd;
-	std::vector<std::string> args;
-	if(argc > 1) {
-		for(int i = 0; i < argc; i++) {
-			std::printf("%s\t", argv[i]);
-			if(i > 1) args.push_back(std::string(argv[i]));
-		}
-		std::printf("\n");
-		cmd = std::string(argv[1]);
-	}
-
-	if(cmd.empty()) {
-		std::cerr << "input cmd";
-		return 1;
-	}
-
-	// create xwindow
-	ShXWindowPr xwin = XWindow::create();
-	// keep visible on WSLg/XWayland
-	gconf.px = {10, 0, 0};
-	gconf.py = {10, 0, 0};
-	gconf.tx = {0, 0, 0};
-	gconf.ty = {0, 0, 0};
-	xwin->_overlay = true; // click-through
-	xwin->_override_redirect = false; // WM-managed for visibility
-	xwin->_transparent_background = true;
-
-	// setup window -> what do we need to pass into it
+	// test overlay mode
+	ShXWindowPr xwin = XWindow::create(win_cfg);
 	xwin->setup();
 
-	while(true) {
-		// fire process for cmdline input
+	auto start = std::chrono::steady_clock::now();
+	constexpr double timeout_sec = 3.0;
+	int iterations = 0;
+
+	while (true) {
+		auto now = std::chrono::steady_clock::now();
+		if (std::chrono::duration<double>(now - start).count() >= timeout_sec) break;
+
+		// run a simple command
 		ShProcessPr process = PTYProcess::create();
 		process->setup();
-		process->start_cmd(cmd,args);
+		process->start_cmd("echo", {"stow test iteration", std::to_string(iterations++)});
 		process->read_text(xwin);
-		sleep(gconf.period);
+
+		usleep(100000); // 100ms between iterations
 	}
 
-	// check process
-	// it either ends or runs indefinitely
-	// redirect process output and capture in string
-	// @hey: implement buffer for output...
+	// test normal mode
+	stow::WindowConfig normal_cfg;
+	normal_cfg.overlay = false;
+
+	ShXWindowPr xwin2 = XWindow::create(normal_cfg);
+	xwin2->setup();
+
+	xwin2->draw("normal mode test\n");
+	xwin2->run();
+	usleep(500000); // show for 500ms
+
+	return 0;
 }

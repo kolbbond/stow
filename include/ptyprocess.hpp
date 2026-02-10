@@ -2,11 +2,9 @@
 
 #pragma once
 
-//#include <iostream>
 #include <csignal>
 #include <cstdio>
 #include <memory>
-//#include <errno.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -22,7 +20,6 @@
 #include <utmp.h>
 #include <algorithm>
 
-//#include "config.h"
 #include "process.hpp"
 #include "xwindow.hpp"
 
@@ -33,6 +30,9 @@ public:
 	int _parentfd;
 	int _childfd;
 	char _childname[100];
+
+	// Default foreground color (used when no config color specified)
+	unsigned int _default_fg = 0x00a080;
 
 	struct ScreenBuffer {
 		struct Cell {
@@ -103,8 +103,12 @@ public:
 		return 0xffffff;
 	}
 
-	static unsigned int default_fg() {
-		return parse_hex_color(gconf.colors[0]);
+	unsigned int default_fg() const {
+		return _default_fg;
+	}
+
+	void set_default_fg(const std::string& color) {
+		_default_fg = parse_hex_color(color);
 	}
 
 	static unsigned int ansi_color_rgb(int idx, bool bright) {
@@ -213,7 +217,7 @@ public:
 		}
 	}
 
-	static void handle_csi(ScreenBuffer& sb, char final, const std::vector<int>& params, size_t max_lines) {
+	void handle_csi(ScreenBuffer& sb, char final, const std::vector<int>& params, size_t max_lines) {
 		if(final == 'm') {
 			if(params.empty()) {
 				sb.current_fg = default_fg();
@@ -300,7 +304,7 @@ public:
 		}
 	}
 
-	static void append_screen(ScreenBuffer& sb, const char* data, size_t len, size_t max_lines) {
+	void append_screen(ScreenBuffer& sb, const char* data, size_t len, size_t max_lines) {
 		for(size_t i = 0; i < len; i++) {
 			unsigned char c = static_cast<unsigned char>(data[i]);
 			if(sb.in_osc) {
@@ -434,15 +438,18 @@ public:
 		return std::make_shared<class PTYProcess>();
 	}
 
+	static ShPTYProcessPr create(const stow::ProcessConfig& config) {
+		auto proc = std::make_shared<class PTYProcess>();
+		proc->set_config(config);
+		return proc;
+	}
+
 	int fd() const {
 		return _parentfd;
 	}
 
 	void setup() override {
-		// self pipe and signal handler
-
 		// start pty
-		//if(pipe(_spipe) == -1) die("pipe:");
 		if(openpty(&_parentfd, &_childfd, _childname, nullptr, nullptr) == -1) {
 			die("openpty");
 		}
@@ -462,9 +469,6 @@ public:
 		_child_status = 0;
 		_nonblock = false;
 
-		// this code uses a lot of globals...
-		// what is pipefd?
-
 		// create a fork
 		_cmdpid = fork();
 		switch(_cmdpid) {
@@ -474,9 +478,6 @@ public:
 			die("fork:");
 		}
 		case 0: { // child process
-			// new process (0 means success)
-			printf("open process\n");
-
 			// close old file descriptors
 			close(_parentfd);
 
@@ -486,12 +487,10 @@ public:
 			}
 
 			// replace current process with cmd[0] with arguments cmd
-			// doesn't error check?
 			std::string pname_str = "stow pty: " + cmd;
 			char* pname = strdup(pname_str.c_str());
 
 			// parse args and copy into cstr
-			//char* const cargs[] = { (char*)pname, nullptr, nullptr };
 			std::vector<char*> cargs = {pname};
 			std::transform(args.begin(), args.end(), std::back_inserter(cargs), [&](const std::string& s) {
 				return strdup(s.c_str());
@@ -509,7 +508,6 @@ public:
 			_exit(1);
 		}
 		default: {
-			// weird output
 			break;
 		}
 		}
@@ -517,7 +515,6 @@ public:
 		// parent process
 		close(_childfd);
 
-		std::printf("child spawned with cmd pid: %i\n", _cmdpid);
 	}
 
 	void set_nonblocking() {

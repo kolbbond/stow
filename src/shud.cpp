@@ -1,9 +1,11 @@
-// grid runner: split screen into cells and run commands serially
+// shud - stow hud: grid-based overlay HUD that runs commands in cells
 #include "stow/config.hpp"
 #include "stow/grid.hpp"
 #include "stow/monitor.hpp"
 #include "ptyprocess.hpp"
 #include "xwindow.hpp"
+
+#include <X11/keysym.h>
 
 #include <fstream>
 #include <iostream>
@@ -26,14 +28,9 @@ struct GridFileConfig {
 	bool single_window = false;
 	bool grid_lines = true;
 	bool fit_to_cells = true;
-	bool buttons = false;
-	int button_x = 10;
-	int button_y = 10;
-	unsigned int button_w = 120;
-	unsigned int button_h = 30;
-	std::string button_label = "Restart";
 	int period = 1;
 	int monitor = -1;  // -1 = primary, 0+ = specific monitor index
+	std::string toggle_key = "super+h";
 };
 
 static std::string trim(const std::string& s) {
@@ -103,11 +100,52 @@ static std::vector<std::string> split_cmd(const std::string& s) {
 	return out;
 }
 
+// Parse a keybind string like "super+h", "ctrl+shift+escape", "F12"
+static bool parse_keybind(const std::string& s, unsigned int& mod_mask, KeySym& keysym) {
+	mod_mask = 0;
+	keysym = NoSymbol;
+
+	std::vector<std::string> parts;
+	std::string cur;
+	for(char c : s) {
+		if(c == '+') {
+			if(!cur.empty()) { parts.push_back(cur); cur.clear(); }
+		} else {
+			cur.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+		}
+	}
+	if(!cur.empty()) parts.push_back(cur);
+	if(parts.empty()) return false;
+
+	for(size_t i = 0; i + 1 < parts.size(); i++) {
+		const std::string& m = parts[i];
+		if(m == "ctrl" || m == "control") mod_mask |= ControlMask;
+		else if(m == "shift") mod_mask |= ShiftMask;
+		else if(m == "alt" || m == "mod1") mod_mask |= Mod1Mask;
+		else if(m == "super" || m == "mod4" || m == "win") mod_mask |= Mod4Mask;
+	}
+
+	const std::string& key = parts.back();
+	keysym = XStringToKeysym(key.c_str());
+	if(keysym == NoSymbol) {
+		std::string cap = key;
+		cap[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(cap[0])));
+		keysym = XStringToKeysym(cap.c_str());
+	}
+	if(keysym == NoSymbol) {
+		std::string upper = key;
+		for(char& c : upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+		keysym = XStringToKeysym(upper.c_str());
+	}
+
+	return keysym != NoSymbol;
+}
+
 static GridFileConfig load_config(const std::string& path) {
 	GridFileConfig cfg;
 	std::ifstream in(path);
 	if(!in) {
-		std::cerr << "cannot open config: " << path << "\n";
+		std::cerr << "shud: cannot open config: " << path << "\n";
 		return cfg;
 	}
 	std::string line;
@@ -134,22 +172,12 @@ static GridFileConfig load_config(const std::string& path) {
 			cfg.grid_lines = !(value == "0" || value == "false" || value == "no");
 		} else if(key == "fit_to_cells") {
 			cfg.fit_to_cells = (value == "1" || value == "true" || value == "yes");
-		} else if(key == "buttons") {
-			cfg.buttons = (value == "1" || value == "true" || value == "yes");
-		} else if(key == "button_x") {
-			cfg.button_x = std::stoi(value);
-		} else if(key == "button_y") {
-			cfg.button_y = std::stoi(value);
-		} else if(key == "button_w") {
-			cfg.button_w = static_cast<unsigned int>(std::stoi(value));
-		} else if(key == "button_h") {
-			cfg.button_h = static_cast<unsigned int>(std::stoi(value));
-		} else if(key == "button_label") {
-			cfg.button_label = value;
 		} else if(key == "period") {
 			cfg.period = std::stoi(value);
 		} else if(key == "monitor") {
 			cfg.monitor = std::stoi(value);
+		} else if(key == "toggle_key") {
+			cfg.toggle_key = value;
 		}
 	}
 	return cfg;
@@ -172,26 +200,54 @@ struct HudState {
 
 int main(int argc, char** argv) {
 	if(argc < 2) {
-		std::cerr << "usage: test_grid <config file>\n";
+		std::cerr << "usage: shud <config.ini>\n";
 		return 1;
 	}
 
 	GridFileConfig file_cfg = load_config(argv[1]);
 	if(file_cfg.rows <= 0 || file_cfg.cols <= 0) {
-		std::cerr << "invalid grid config\n";
+		std::cerr << "shud: invalid grid config\n";
 		return 1;
 	}
 	if(static_cast<int>(file_cfg.row_heights.size()) != file_cfg.rows ||
 		static_cast<int>(file_cfg.col_widths.size()) != file_cfg.cols) {
-		std::cerr << "row_heights/col_widths must match rows/cols\n";
+		std::cerr << "shud: row_heights/col_widths must match rows/cols\n";
 		return 1;
 	}
 	if(static_cast<int>(file_cfg.cells.size()) != file_cfg.rows * file_cfg.cols) {
-		std::cerr << "cell count must match rows*cols\n";
+		std::cerr << "shud: cell count must match rows*cols\n";
 		return 1;
 	}
 
-	// Create grid layout configuration
+	// Query screen size and monitors with a temporary display connection
+	unsigned int screen_w = 0;
+	unsigned int screen_h = 0;
+	int monitor_x = 0;
+	int monitor_y = 0;
+	{
+		Display* tmp_dpy = XOpenDisplay(nullptr);
+		if(!tmp_dpy) {
+			std::cerr << "shud: cannot open display\n";
+			return 1;
+		}
+		int scr = DefaultScreen(tmp_dpy);
+		screen_w = DisplayWidth(tmp_dpy, scr);
+		screen_h = DisplayHeight(tmp_dpy, scr);
+
+		auto monitor_mgr = stow::MonitorManager::create(tmp_dpy);
+		const stow::Monitor* mon = monitor_mgr->at(file_cfg.monitor);
+		if(mon) {
+			monitor_x = mon->x;
+			monitor_y = mon->y;
+			screen_w = mon->width;
+			screen_h = mon->height;
+			std::cout << "monitor " << mon->index << " (" << mon->name << "): "
+			          << mon->width << "x" << mon->height << " at " << mon->x << "," << mon->y << "\n";
+		}
+		XCloseDisplay(tmp_dpy);
+	}
+
+	// Create grid layout
 	stow::GridConfig grid_cfg;
 	grid_cfg.rows = file_cfg.rows;
 	grid_cfg.cols = file_cfg.cols;
@@ -201,37 +257,13 @@ int main(int argc, char** argv) {
 
 	stow::GridLayout grid(grid_cfg);
 
-	// base window for screen size
-	stow::WindowConfig base_cfg;
-	base_cfg.overlay = true;
-
-	ShXWindowPr base = XWindow::create(base_cfg);
-	base->setup();
-
-	// Get monitor geometry
-	int monitor_x = 0;
-	int monitor_y = 0;
-	unsigned int screen_w = base->_screen_width;
-	unsigned int screen_h = base->_screen_height;
-
-	auto monitor_mgr = stow::MonitorManager::create(base->_dpy);
-	const stow::Monitor* mon = monitor_mgr->at(file_cfg.monitor);
-	if (mon) {
-		monitor_x = mon->x;
-		monitor_y = mon->y;
-		screen_w = mon->width;
-		screen_h = mon->height;
-		std::cout << "Using monitor " << mon->index << " (" << mon->name << "): "
-		          << mon->width << "x" << mon->height << " at " << mon->x << "," << mon->y << "\n";
-	}
-
 	unsigned int grid_w = 0;
 	unsigned int grid_h = 0;
 	grid.total_size(screen_w, screen_h, grid_w, grid_h);
 
 	std::vector<stow::Rect> geoms = grid.calculate(screen_w, screen_h);
 	if(geoms.empty()) {
-		std::cerr << "failed to build grid\n";
+		std::cerr << "shud: failed to build grid\n";
 		return 1;
 	}
 
@@ -240,14 +272,16 @@ int main(int argc, char** argv) {
 		lines = grid.get_grid_lines(screen_w, screen_h);
 	}
 
+	// Create windows
 	std::vector<CellState> cells;
 	cells.reserve(geoms.size());
 	std::vector<bool> hud_cells(geoms.size(), false);
 
 	ShXWindowPr shared;
-	if (file_cfg.single_window) {
+	if(file_cfg.single_window) {
 		stow::WindowConfig shared_cfg;
-		shared_cfg.overlay = !file_cfg.buttons;
+		shared_cfg.title = "shud";
+		shared_cfg.overlay = true;
 		shared_cfg.use_fixed_geometry = true;
 		shared_cfg.fixed_x = monitor_x;
 		shared_cfg.fixed_y = monitor_y;
@@ -256,14 +290,19 @@ int main(int argc, char** argv) {
 
 		shared = XWindow::create(shared_cfg);
 		shared->setup();
+		std::cout << "overlay: " << (shared->_overlay ? "yes" : "no") << "\n";
+		std::cout << "window id: 0x" << std::hex << shared->_win << std::dec << "\n";
+		std::cout << "override_redirect: " << (shared->_override_redirect ? "yes" : "no") << "\n";
+		std::cout << "depth: " << shared->_depth << "\n";
 	}
 
-	for (size_t i = 0; i < geoms.size(); i++) {
+	for(size_t i = 0; i < geoms.size(); i++) {
 		ShXWindowPr xwin;
-		if (file_cfg.single_window) {
+		if(file_cfg.single_window) {
 			xwin = shared;
 		} else {
 			stow::WindowConfig cell_cfg;
+			cell_cfg.title = "shud";
 			cell_cfg.overlay = true;
 			cell_cfg.use_fixed_geometry = true;
 			cell_cfg.fixed_x = monitor_x + geoms[i].x;
@@ -280,6 +319,34 @@ int main(int argc, char** argv) {
 		if(i < file_cfg.cells.size() && is_hud_cell(file_cfg.cells[i])) {
 			hud_cells[i] = true;
 		}
+	}
+
+	// Grab toggle key on root window for interactive mode switch
+	bool interactive = false;
+	Display* dpy = shared ? shared->_dpy : cells[0].win->_dpy;
+	Window root = shared ? shared->_root : cells[0].win->_root;
+
+	unsigned int toggle_mod = 0;
+	KeySym toggle_sym = NoSymbol;
+	KeyCode toggle_keycode = 0;
+
+	if(parse_keybind(file_cfg.toggle_key, toggle_mod, toggle_sym)) {
+		toggle_keycode = XKeysymToKeycode(dpy, toggle_sym);
+		if(toggle_keycode) {
+			XGrabKey(dpy, toggle_keycode, toggle_mod, root,
+				False, GrabModeAsync, GrabModeAsync);
+			XGrabKey(dpy, toggle_keycode, toggle_mod | Mod2Mask, root,
+				False, GrabModeAsync, GrabModeAsync);
+			XGrabKey(dpy, toggle_keycode, toggle_mod | LockMask, root,
+				False, GrabModeAsync, GrabModeAsync);
+			XGrabKey(dpy, toggle_keycode, toggle_mod | Mod2Mask | LockMask, root,
+				False, GrabModeAsync, GrabModeAsync);
+			std::cout << "toggle interactive: " << file_cfg.toggle_key << "\n";
+		} else {
+			std::cerr << "shud: cannot resolve toggle key: " << file_cfg.toggle_key << "\n";
+		}
+	} else {
+		std::cerr << "shud: invalid toggle_key: " << file_cfg.toggle_key << "\n";
 	}
 
 	HudState hud;
@@ -328,18 +395,17 @@ int main(int argc, char** argv) {
 
 		int mouse_x = 0;
 		int mouse_y = 0;
-		Window root = 0;
-		Window child = 0;
-		int win_x = 0;
-		int win_y = 0;
-		unsigned int mask = 0;
-		Display* hud_dpy = shared ? shared->_dpy : base->_dpy;
-		Window hud_root = shared ? shared->_root : base->_root;
-		if(XQueryPointer(hud_dpy, hud_root, &root, &child, &mouse_x, &mouse_y,
-			   &win_x, &win_y, &mask) == False) {
-			mouse_x = 0;
-			mouse_y = 0;
+		{
+			Window qroot = 0, qchild = 0;
+			int win_x = 0, win_y = 0;
+			unsigned int mask = 0;
+			if(XQueryPointer(dpy, root, &qroot, &qchild, &mouse_x, &mouse_y,
+				   &win_x, &win_y, &mask) == False) {
+				mouse_x = 0;
+				mouse_y = 0;
+			}
 		}
+
 		size_t pidx = 0;
 		bool drew_any = false;
 		for(size_t i = 0; i < cells.size(); i++) {
@@ -384,6 +450,7 @@ int main(int argc, char** argv) {
 			hud_text << "fps: " << hud.fps << "\n";
 			hud_text << "mouse: " << mouse_x << "," << mouse_y << "\n";
 			hud_text << "time: " << format_time_now() << "\n";
+			if(interactive) hud_text << "[INTERACTIVE]\n";
 			if(file_cfg.single_window) {
 				shared->draw_region(hud_text.str(), geoms[i].x, geoms[i].y, geoms[i].width, geoms[i].height);
 			} else {
@@ -404,46 +471,26 @@ int main(int argc, char** argv) {
 						lines.vertical_x[i], grid_h);
 				}
 			}
-			if(file_cfg.buttons) {
-				int bx = file_cfg.button_x;
-				int by = file_cfg.button_y;
-				unsigned int bw = file_cfg.button_w;
-				unsigned int bh = file_cfg.button_h;
-				XSetForeground(shared->_dpy, shared->_xgc, shared->_xbackground.pixel);
-				XFillRectangle(shared->_dpy, shared->_drawable, shared->_xgc, bx, by, bw, bh);
-				XSetForeground(shared->_dpy, shared->_xgc, shared->_xforeground.pixel);
-				XDrawRectangle(shared->_dpy, shared->_drawable, shared->_xgc, bx, by, bw, bh);
-
-				XGlyphInfo ex;
-				XftTextExtentsUtf8(shared->_dpy, shared->_xfont,
-					(unsigned char*)file_cfg.button_label.c_str(), file_cfg.button_label.size(), &ex);
-				int tx = bx + (bw - ex.xOff) / 2;
-				int ty = by + (bh - (shared->_xfont->ascent + shared->_xfont->descent)) / 2;
-				XftDrawStringUtf8(shared->_xdraw, &shared->_xforeground, shared->_xfont,
-					tx, ty + shared->_xfont->ascent,
-					(unsigned char*)file_cfg.button_label.c_str(), file_cfg.button_label.size());
-			}
 			shared->run();
 		}
 
-		if(file_cfg.single_window && file_cfg.buttons && shared) {
-			while(XPending(shared->_dpy)) {
-				XEvent ev;
-				XNextEvent(shared->_dpy, &ev);
-				if(ev.type == ButtonPress) {
-					int mx = ev.xbutton.x;
-					int my = ev.xbutton.y;
-					if(mx >= file_cfg.button_x && mx < file_cfg.button_x + (int)file_cfg.button_w &&
-						my >= file_cfg.button_y && my < file_cfg.button_y + (int)file_cfg.button_h) {
-						time_t now = time(NULL);
-						for(size_t i = 0; i < cells.size(); i++) {
-							if(cells[i].proc) {
-								cells[i].done = true;
-								cells[i].restart_at = now;
-							}
-						}
+		// Process X events - handle toggle key (grabbed on root so it works in overlay mode)
+		while(XPending(dpy)) {
+			XEvent ev;
+			XNextEvent(dpy, &ev);
+			if(ev.type == KeyPress && toggle_keycode &&
+				ev.xkey.keycode == toggle_keycode) {
+				interactive = !interactive;
+				if(file_cfg.single_window && shared) {
+					//shared->set_clickthrough(!interactive);
+					shared->set_clickthrough(true);
+				} else {
+					for(auto& c : cells) {
+						//if(c.win) c.win->set_clickthrough(!interactive);
+						if(c.win) c.win->set_clickthrough(true);
 					}
 				}
+				std::cout << (interactive ? "interactive mode" : "overlay mode") << "\n";
 			}
 		}
 	}

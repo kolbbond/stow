@@ -1,4 +1,5 @@
 // test start a separate process
+#include "stow/config.hpp"
 #include "pipeprocess.hpp"
 #include "ptyprocess.hpp"
 
@@ -16,16 +17,22 @@ int main(int argc, char** argv) {
 		cmd = std::string(argv[1]);
 	}
 
-	if(cmd.empty()) std::cerr << "input cmd";
+	if(cmd.empty()) {
+		std::cerr << "input cmd\n";
+		return 1;
+	}
+
+	// Create process with config
+	stow::ProcessConfig cfg;
+	cfg.command = cmd;
+	cfg.args = args;
+	cfg.use_pty = true;
 
 	// fire process for cmdline input
-	ShProcessPr process = PTYProcess::create();
+	ShProcessPr process = PTYProcess::create(cfg);
 	process->setup();
-	process->start_cmd(cmd,args);
+	process->start_cmd(cmd, args);
 	process->read_text();
 
-	// check process
-	// it either ends or runs indefinitely
-	// redirect process output and capture in string
-	// @hey: implement buffer for output...
+	return 0;
 }

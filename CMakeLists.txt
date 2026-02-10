@@ -1,9 +1,13 @@
-# cmake 
+# cmake
 cmake_minimum_required(VERSION 3.30)
 project(stow)
 
 # compile commands
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # output paths
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin CACHE PATH "" FORCE)
@@ -14,50 +18,60 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib CACHE PATH ""
 find_package(Freetype REQUIRED)
 find_package(X11 REQUIRED)
 
+# Check for optional X11 extensions
+set(STOW_COMPILE_DEFINITIONS "")
+
+if(X11_Xrandr_FOUND)
+    message(STATUS "XRandR found - multi-monitor support enabled")
+    list(APPEND STOW_COMPILE_DEFINITIONS HAVE_XRANDR)
+else()
+    message(STATUS "XRandR not found - falling back to Xinerama or single monitor")
+endif()
+
+if(X11_Xinerama_FOUND)
+    message(STATUS "Xinerama found - multi-monitor fallback available")
+    list(APPEND STOW_COMPILE_DEFINITIONS HAVE_XINERAMA)
+else()
+    message(STATUS "Xinerama not found")
+endif()
+
 # add library
 add_library(stowlib INTERFACE)
-target_include_directories(stowlib INTERFACE include)
+target_include_directories(stowlib INTERFACE
+    include
+    ${FREETYPE_INCLUDE_DIRS}
+)
 target_link_libraries(stowlib INTERFACE
     freetype
     X11
     Xft
     Xext
     Xfixes
-    
 )
 
-if(0)
-# add sources
-set(source_list 
-    src/stow.c
-)
-
-add_executable(stow
-    ${source_list}
-)
-
-target_link_libraries(stow
-    freetype
-    X11
-    Xft
-    Xext
-    Xfixes
-    
-)
-
-target_include_directories(stow PUBLIC
-    include
-    ${FREETYPE_INCLUDE_DIRS}
-    
-)
+# Add optional libraries
+if(X11_Xrandr_FOUND)
+    target_link_libraries(stowlib INTERFACE ${X11_Xrandr_LIB})
 endif()
+
+if(X11_Xinerama_FOUND)
+    target_link_libraries(stowlib INTERFACE ${X11_Xinerama_LIB})
+endif()
+
+# Add compile definitions
+target_compile_definitions(stowlib INTERFACE ${STOW_COMPILE_DEFINITIONS})
+
+# main stow executable
+add_executable(stow src/stow.cpp)
+target_link_libraries(stow stowlib)
+
+# shud - grid-based overlay HUD
+add_executable(shud src/shud.cpp)
+target_link_libraries(shud stowlib)
 
 # add test
 enable_testing()
 add_subdirectory(test)
 
 # install
-install(FILES ${CMAKE_BINARY_DIR}/stow 
-    PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE WORLD_EXECUTE
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
-)
+install(TARGETS stow shud DESTINATION bin)

@@ -1,28 +1,34 @@
 // test fullscreen xwindow
+#include "stow/config.hpp"
 #include "xwindow.hpp"
 
+#include <chrono>
+
 int main() {
-	// fullscreen window on WSLg: keep it WM-managed but click-through
-	gconf.alpha = 0.2;
-	gconf.px = {0, 0, 0};
-	gconf.py = {0, 0, 0};
-	gconf.tx = {0, 0, 0};
-	gconf.ty = {0, 0, 0};
-	gconf.borderless = 1;
+	// Create fullscreen window config
+	stow::WindowConfig cfg;
+	cfg.alpha = 0.2;
+	cfg.px = stow::Position(0);
+	cfg.py = stow::Position(0);
+	cfg.borderless = true;
+	cfg.fullscreen = true;
+	cfg.overlay = true;
 
-	ShXWindowPr xwin = XWindow::create();
-	xwin->_overlay = true;
-	xwin->_override_redirect = false;
-	xwin->_transparent_background = true;
-	xwin->_fullscreen = true;
-
+	ShXWindowPr xwin = XWindow::create(cfg);
 	xwin->setup();
 
-	bool done = false;
+	auto start = std::chrono::steady_clock::now();
+	constexpr double timeout_sec = 3.0;
+
 	int cnt = 0;
-	while(!done) {
+	while (true) {
+		auto now = std::chrono::steady_clock::now();
+		if (std::chrono::duration<double>(now - start).count() >= timeout_sec) break;
+
 		std::string text = "fullscreen test " + std::to_string(cnt++) + "\n";
 		xwin->draw(text);
 		xwin->run();
 	}
+
+	return 0;
 }
