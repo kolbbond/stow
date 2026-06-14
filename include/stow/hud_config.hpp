@@ -45,6 +45,54 @@ struct HudConfig {
 	static HudConfig load(const std::string& path);
 };
 
+namespace detail {
+
+inline std::string trim(const std::string& s) {
+	size_t start = s.find_first_not_of(" \t\r\n");
+	if(start == std::string::npos) return "";
+	size_t end = s.find_last_not_of(" \t\r\n");
+	return s.substr(start, end - start + 1);
+}
+
+inline std::string lower(std::string s) {
+	for(char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	return s;
+}
+
+inline bool truthy(const std::string& v) {
+	std::string l = lower(v);
+	return l == "1" || l == "true" || l == "yes" || l == "on";
+}
+
+inline std::vector<int> csv_ints(const std::string& s) {
+	std::vector<int> out;
+	std::stringstream ss(s);
+	std::string item;
+	while(std::getline(ss, item, ',')) {
+		item = trim(item);
+		if(item.empty()) continue;
+		try { out.push_back(std::stoi(item)); } catch(...) { /* caller validates */ }
+	}
+	return out;
+}
+
+inline std::vector<std::string> csv_strs(const std::string& s) {
+	std::vector<std::string> out;
+	std::stringstream ss(s);
+	std::string item;
+	while(std::getline(ss, item, ',')) {
+		item = trim(item);
+		if(!item.empty()) out.push_back(item);
+	}
+	return out;
+}
+
+inline int to_int(const std::string& v, int fallback) {
+	try { return std::stoi(v); } catch(...) { return fallback; }
+}
+
+}  // namespace detail
+
 inline HudConfig HudConfig::load(const std::string& path) {
 	HudConfig cfg;
 	std::ifstream in(path);
@@ -52,7 +100,45 @@ inline HudConfig HudConfig::load(const std::string& path) {
 		cfg.error = "cannot open config: " + path;
 		return cfg;
 	}
-	return cfg;  // parsing added in later tasks
+
+	auto add_err = [&cfg](const std::string& m) {
+		if(!cfg.error.empty()) cfg.error += "; ";
+		cfg.error += m;
+	};
+
+	std::string line;
+	std::string section;  // "", "grid", "cell", "hud"
+
+	while(std::getline(in, line)) {
+		line = detail::trim(line);
+		if(line.empty() || line[0] == '#' || line[0] == ';') continue;
+
+		if(line.front() == '[' && line.back() == ']') {
+			section = detail::lower(detail::trim(line.substr(1, line.size() - 2)));
+			continue;
+		}
+
+		size_t eq = line.find('=');
+		if(eq == std::string::npos) { add_err("malformed line: " + line); continue; }
+		std::string key = detail::trim(line.substr(0, eq));
+		std::string val = detail::trim(line.substr(eq + 1));
+
+		if(section == "grid") {
+			if(key == "rows") cfg.grid.rows = detail::to_int(val, 0);
+			else if(key == "cols") cfg.grid.cols = detail::to_int(val, 0);
+			else if(key == "row_heights") cfg.grid.row_heights = detail::csv_ints(val);
+			else if(key == "col_widths") cfg.grid.col_widths = detail::csv_ints(val);
+			else if(key == "monitor") cfg.monitor = detail::to_int(val, -1);
+			else if(key == "period") cfg.period = detail::to_int(val, 1);
+			else if(key == "single_window") cfg.single_window = detail::truthy(val);
+			else if(key == "grid_lines") cfg.grid_lines = detail::truthy(val);
+			else if(key == "fit_to_cells") cfg.fit_to_cells = detail::truthy(val);
+			else if(key == "toggle_key") cfg.toggle_key = val;
+			else add_err("unknown grid key: " + key);
+		}
+	}
+
+	return cfg;
 }
 
 }  // namespace stow
