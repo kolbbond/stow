@@ -1,5 +1,9 @@
 // test fullscreen xwindow
 #include "stow/config.hpp"
+#include "platform.hpp"
+
+#if STOW_POSIX
+
 #include "xwindow.hpp"
 
 #include <chrono>
@@ -32,3 +36,14 @@ int main() {
 
 	return 0;
 }
+
+#else // STOW_WINDOWS
+
+#include <iostream>
+
+int main() {
+	std::cout << "test_fullscreen is only available on POSIX/X11 platforms\n";
+	return 0;
+}
+
+#endif // STOW_POSIX

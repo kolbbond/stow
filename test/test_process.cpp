@@ -1,7 +1,14 @@
 // test start a separate process
 #include "stow/config.hpp"
+#include "platform.hpp"
+
+#if STOW_POSIX
 #include "pipeprocess.hpp"
 #include "ptyprocess.hpp"
+#elif STOW_WINDOWS
+#include "win32pipeprocess.hpp"
+#include "win32ptyprocess.hpp"
+#endif
 
 int main(int argc, char** argv) {
 

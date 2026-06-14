@@ -198,6 +198,15 @@ struct HudState {
 	std::chrono::steady_clock::time_point last_fps = std::chrono::steady_clock::now();
 };
 
+static int x_error_handler(Display* dpy, XErrorEvent* ev) {
+	char buf[256];
+	XGetErrorText(dpy, ev->error_code, buf, sizeof(buf));
+	std::cerr << "X error: " << buf
+	          << " (opcode=" << static_cast<int>(ev->request_code)
+	          << " resource=0x" << std::hex << ev->resourceid << std::dec << ")\n";
+	return 0;
+}
+
 int main(int argc, char** argv) {
 	if(argc < 2) {
 		std::cerr << "usage: shud <config.ini>\n";
@@ -218,6 +227,8 @@ int main(int argc, char** argv) {
 		std::cerr << "shud: cell count must match rows*cols\n";
 		return 1;
 	}
+
+	XSetErrorHandler(x_error_handler);
 
 	// Query screen size and monitors with a temporary display connection
 	unsigned int screen_w = 0;
@@ -348,6 +359,9 @@ int main(int argc, char** argv) {
 	} else {
 		std::cerr << "shud: invalid toggle_key: " << file_cfg.toggle_key << "\n";
 	}
+
+	// Flush any X errors from grab attempts before entering main loop
+	XSync(dpy, False);
 
 	HudState hud;
 

@@ -1,5 +1,9 @@
-// pipe process
+// pipe process - POSIX implementation
 #pragma once
+
+#include "platform.hpp"
+
+#if STOW_POSIX
 
 #include <iostream>
 #include <csignal>
@@ -51,6 +55,8 @@ public:
 	}
 
 	void start_cmd(std::string cmd, std::vector<std::string> args) override {
+		(void)args; // unused in pipe implementation
+
 		// check pipe exists and is good
 		if(-1 == pipe(_pipefd)) die("pipe:");
 
@@ -95,7 +101,8 @@ public:
 	}
 
 	// read output from file pipe
-	void read_text(ShXWindowPr xwin=NULL) override {
+	void read_text(ShWindowPtr win = nullptr) override {
+		(void)win;
 		char delimiter = _config.delimiter;
 		int dlen = 1;
 		static char* text;
@@ -143,3 +150,5 @@ public:
 		}
 	}
 };
+
+#endif // STOW_POSIX

@@ -1,11 +1,21 @@
 // test stow functionality - runs a command and exits after timeout
 #include "stow/config.hpp"
+#include "platform.hpp"
+
+#if STOW_POSIX
 #include "pipeprocess.hpp"
 #include "ptyprocess.hpp"
 #include "xwindow.hpp"
-
 #include <chrono>
 #include <unistd.h>
+#elif STOW_WINDOWS
+#include "win32pipeprocess.hpp"
+#include "win32ptyprocess.hpp"
+#include "win32window.hpp"
+#include <windows.h>
+#endif
+
+#include "window.hpp"
 
 int main() {
 	// Create window config
@@ -14,6 +24,7 @@ int main() {
 	win_cfg.py = stow::Position(10);
 	win_cfg.overlay = true;
 
+#if STOW_POSIX
 	// test overlay mode
 	ShXWindowPr xwin = XWindow::create(win_cfg);
 	xwin->setup();
@@ -45,6 +56,7 @@ int main() {
 	xwin2->draw("normal mode test\n");
 	xwin2->run();
 	usleep(500000); // show for 500ms
+#endif
 
 	return 0;
 }

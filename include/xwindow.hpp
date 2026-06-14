@@ -1,6 +1,10 @@
 // X11 overlay window with transparency and click-through support
 #pragma once
 
+#include "platform.hpp"
+
+#if STOW_POSIX
+
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/Xft/Xft.h>
@@ -17,14 +21,11 @@
 
 #include "stow/config.hpp"
 #include "error.hpp"
+#include "window.hpp"
 
 typedef std::shared_ptr<class XWindow> ShXWindowPr;
-struct ColorSpan {
-	std::string text;
-	unsigned int rgb;
-};
 
-class XWindow {
+class XWindow : public StowWindow {
 public:
 	// Configuration
 	stow::WindowConfig _config;
@@ -48,33 +49,11 @@ public:
 	XftColor _xbackground = {};
 	std::unordered_map<unsigned int, XftColor> _color_cache;
 
-	// Screen and window geometry
-	unsigned int _screen_width = 0;
-	unsigned int _screen_height = 0;
-	unsigned int _window_width = 0;
-	unsigned int _window_height = 0;
-
 	// Monitor offset (for multi-monitor support)
 	int _monitor_x = 0;
 	int _monitor_y = 0;
 	unsigned int _monitor_width = 0;
 	unsigned int _monitor_height = 0;
-
-	// State flags
-	bool _dirty = true;
-	bool _hidden = true;
-	bool _overlay = true;
-	bool _override_redirect = true;
-	bool _transparent_background = true;
-	bool _fullscreen = false;
-	bool _borderless = false;
-
-	// Fixed geometry mode
-	bool _use_fixed_geometry = false;
-	int _fixed_x = 0;
-	int _fixed_y = 0;
-	unsigned int _fixed_w = 0;
-	unsigned int _fixed_h = 0;
 
 	static ShXWindowPr create() { return std::make_shared<XWindow>(); }
 
@@ -88,7 +67,7 @@ public:
 		_config = config;
 		_overlay = config.overlay;
 		_transparent_background = config.overlay;
-		_override_redirect = false;
+		_override_redirect = config.overlay;
 		_borderless = config.borderless;
 		_fullscreen = config.fullscreen;
 		_use_fixed_geometry = config.use_fixed_geometry;
@@ -119,16 +98,12 @@ public:
 		_overlay = enabled;
 		if(!_dpy || !_win) return;
 		if(enabled) {
-			// Empty region = all clicks pass through
-			XserverRegion region = XFixesCreateRegion(_dpy, NULL, 0);
-			XFixesSetWindowShapeRegion(_dpy, _win, ShapeInput, 0, 0, region);
-			XFixesDestroyRegion(_dpy, region);
+			// Empty input shape = all clicks pass through
+			XShapeCombineRectangles(_dpy, _win, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
 		} else {
 			// Full window input region = window receives clicks
 			XRectangle rect = { 0, 0, static_cast<unsigned short>(_window_width), static_cast<unsigned short>(_window_height) };
-			XserverRegion region = XFixesCreateRegion(_dpy, &rect, 1);
-			XFixesSetWindowShapeRegion(_dpy, _win, ShapeInput, 0, 0, region);
-			XFixesDestroyRegion(_dpy, region);
+			XShapeCombineRectangles(_dpy, _win, ShapeInput, 0, 0, &rect, 1, ShapeSet, Unsorted);
 			XSelectInput(_dpy, _win, ExposureMask | ButtonPressMask | KeyPressMask);
 		}
 		XSync(_dpy, False);
@@ -165,7 +140,7 @@ public:
 		if(_dpy) XCloseDisplay(_dpy);
 	}
 
-	void setup() {
+	void setup() override {
 		_dpy = XOpenDisplay(nullptr);
 		if(!_dpy) { Error::die("cannot open display"); }
 
@@ -243,16 +218,9 @@ public:
 			XChangeProperty(_dpy, _win, opacity_atom, XA_CARDINAL, 32, PropModeReplace, reinterpret_cast<unsigned char*>(&opacity), 1);
 		}
 
-		// Click-through using Xfixes (must be set before any surface commit)
+		// Click-through: set empty input shape so all clicks pass through
 		if(_overlay) {
-			int xfixes_event = 0, xfixes_error = 0;
-			if(XFixesQueryExtension(_dpy, &xfixes_event, &xfixes_error)) {
-				XserverRegion region = XFixesCreateRegion(_dpy, NULL, 0);
-				XFixesSetWindowShapeRegion(_dpy, _win, ShapeInput, 0, 0, region);
-				XFixesDestroyRegion(_dpy, region);
-			} else {
-				_overlay = false;
-			}
+			XShapeCombineRectangles(_dpy, _win, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
 		}
 
 		XGCValues gcvalues = {};
@@ -269,7 +237,7 @@ public:
 		XSetClassHint(_dpy, _win, &class_hint);
 	}
 
-	void draw(const std::string& text) {
+	void draw(const std::string& text) override {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int prev_w = _window_width;
 		unsigned int prev_h = _window_height;
@@ -325,7 +293,7 @@ public:
 		}
 	}
 
-	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) {
+	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) override {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int prev_w = _window_width;
 		unsigned int prev_h = _window_height;
@@ -371,7 +339,7 @@ public:
 		return &_color_cache.emplace(rgb, color).first->second;
 	}
 
-	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) {
+	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) override {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int rw = 0;
 		unsigned int rh = 0;
@@ -385,7 +353,7 @@ public:
 		draw_region_spans(lines, 0, 0, rw, rh);
 	}
 
-	void draw_region_spans(const std::vector<std::vector<ColorSpan>>& lines, int rx, int ry, unsigned int rw, unsigned int rh) {
+	void draw_region_spans(const std::vector<std::vector<ColorSpan>>& lines, int rx, int ry, unsigned int rw, unsigned int rh) override {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int prev_w = _window_width;
 		unsigned int prev_h = _window_height;
@@ -423,7 +391,7 @@ public:
 		clear_clip();
 	}
 
-	void run() {
+	void run() override {
 		if(_hidden) {
 			XUnmapWindow(_dpy, _win);
 			XSync(_dpy, False);
@@ -460,9 +428,7 @@ public:
 
 		// Re-apply click-through after resize (XWayland resets ShapeInput on resize)
 		if(_overlay) {
-			XserverRegion region = XFixesCreateRegion(_dpy, NULL, 0);
-			XFixesSetWindowShapeRegion(_dpy, _win, ShapeInput, 0, 0, region);
-			XFixesDestroyRegion(_dpy, region);
+			XShapeCombineRectangles(_dpy, _win, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
 		}
 
 		XCopyArea(_dpy, _drawable, _win, _xgc, 0, 0, _window_width, _window_height, 0, 0);
@@ -528,3 +494,10 @@ private:
 		return width;
 	}
 };
+
+// Factory implementation for POSIX
+inline ShWindowPtr StowWindow::create() {
+	return std::static_pointer_cast<StowWindow>(XWindow::create());
+}
+
+#endif // STOW_POSIX

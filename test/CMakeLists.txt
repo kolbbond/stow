@@ -10,6 +10,7 @@ set(test_list
     test_grid.cpp
     test_monitor.cpp
     test_layout.cpp
+    test_clickthrough.cpp
 )
 
 # walk over source files

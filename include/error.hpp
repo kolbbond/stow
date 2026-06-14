@@ -1,24 +1,28 @@
 #pragma once
 // error
 
+#include "platform.hpp"
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/wait.h>
+#include <stdlib.h>
 
+#if STOW_POSIX
+#include <sys/wait.h>
 #include <limits.h>
 #include <poll.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 
 class Error {
 
 public:
-	__attribute__((noreturn)) static void die(const char* fmt, ...) {
+	[[noreturn]] static void die(const char* fmt, ...) {
 		// returns error message and quits
 		int tmp = errno;
 		va_list ap;
@@ -38,6 +42,7 @@ public:
 		exit(1);
 	}
 
+#if STOW_POSIX
 	static void reap(int cmdpid) {
 		// does this kill the process?
 		for(;;) {
@@ -56,6 +61,7 @@ public:
 			}
 		}
 	}
+#endif
 
 	static void usage() {
 		// displays usage options and quits through die()
