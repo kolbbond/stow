@@ -7,7 +7,7 @@ set(test_list
     test_process.cpp
     test_stow.cpp
     test_fullscreen.cpp
-    test_grid.cpp
+    test_dashboard.cpp
     test_monitor.cpp
     test_layout.cpp
     test_hud_config.cpp
@@ -33,7 +33,7 @@ add_test(NAME test_xwindow     COMMAND test_xwindow)
 add_test(NAME test_process     COMMAND test_process echo "stow process test")
 add_test(NAME test_stow        COMMAND test_stow)
 add_test(NAME test_fullscreen  COMMAND test_fullscreen)
-add_test(NAME test_grid        COMMAND test_grid ${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini 3)
+add_test(NAME test_dashboard   COMMAND test_dashboard ${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini 2)
 add_test(NAME test_monitor     COMMAND test_monitor)
 add_test(NAME test_layout      COMMAND test_layout)
 add_test(NAME test_hud_config  COMMAND test_hud_config)
