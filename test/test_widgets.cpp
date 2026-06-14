@@ -1,5 +1,6 @@
 // headless unit tests for widget value logic
 #include "stow/widget.hpp"
+#include "stow/capture.hpp"
 
 #include <iostream>
 #include <string>
@@ -17,6 +18,18 @@ struct NullWidget : stow::Widget {
 };
 }
 
+static void test_capture() {
+	// last non-empty line of stdout, trimmed
+	CHECK(stow::capture_command("printf 'a\\nb\\n'") == "b");
+	CHECK(stow::capture_command("printf '  42  \\n'") == "42");
+	// trailing blank lines ignored
+	CHECK(stow::capture_command("printf 'x\\n\\n\\n'") == "x");
+	// empty output => empty string
+	CHECK(stow::capture_command("true") == "");
+	// command that fails to run => empty string (no throw, no crash)
+	CHECK(stow::capture_command("this_command_does_not_exist_xyz 2>/dev/null") == "");
+}
+
 static void test_interface() {
 	NullWidget w;
 	CHECK(w.fd() == -1);          // default: not pollable
@@ -26,6 +39,7 @@ static void test_interface() {
 }
 
 int main() {
+	test_capture();
 	test_interface();
 	if(g_failures) { std::cerr << g_failures << " checks failed\n"; return 1; }
 	std::cout << "all widget tests passed\n";
