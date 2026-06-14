@@ -12,6 +12,7 @@ set(test_list
     test_layout.cpp
     test_hud_config.cpp
     test_clickthrough.cpp
+    test_widgets.cpp
 )
 
 # walk over source files
@@ -37,6 +38,7 @@ add_test(NAME test_monitor     COMMAND test_monitor)
 add_test(NAME test_layout      COMMAND test_layout)
 add_test(NAME test_hud_config  COMMAND test_hud_config)
 add_test(NAME test_clickthrough COMMAND test_clickthrough)
+add_test(NAME test_widgets     COMMAND test_widgets)
 
 target_compile_definitions(test_hud_config PRIVATE
     HUD_TEST_INI="${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini")
