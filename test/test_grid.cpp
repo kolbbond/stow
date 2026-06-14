@@ -17,6 +17,7 @@
 #include <chrono>
 #include <ctime>
 #include <cctype>
+#include <cstdlib>
 #include <iomanip>
 #include <unistd.h>
 #include <poll.h>
@@ -176,9 +177,12 @@ struct HudState {
 
 int main(int argc, char** argv) {
 	if(argc < 2) {
-		std::cerr << "usage: test_grid <config file>\n";
+		std::cerr << "usage: test_grid <config file> [timeout_sec]\n";
 		return 1;
 	}
+
+	// optional timeout: 0 = run until killed (interactive default)
+	double timeout_sec = argc > 2 ? std::atof(argv[2]) : 0.0;
 
 	GridFileConfig file_cfg = load_config(argv[1]);
 	if(file_cfg.rows <= 0 || file_cfg.cols <= 0) {
@@ -288,7 +292,12 @@ int main(int argc, char** argv) {
 
 	HudState hud;
 
+	auto run_start = std::chrono::steady_clock::now();
 	while(true) {
+		if(timeout_sec > 0.0 &&
+			std::chrono::duration<double>(std::chrono::steady_clock::now() - run_start).count() >= timeout_sec) {
+			break;
+		}
 		for(size_t i = 0; i < file_cfg.cells.size(); i++) {
 			if(i < hud_cells.size() && hud_cells[i]) continue;
 			if(!cells[i].cmd.empty()) continue;

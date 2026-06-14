@@ -24,7 +24,16 @@ foreach(srcfile ${test_list})
         ${CMAKE_SOURCE_DIR}/include
         ${FREETYPE_INCLUDE_DIRS}
     )
-    add_test(${name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${name})
 endforeach()
+
+# register tests; the demo runners need args (a command / a config + timeout)
+add_test(NAME test_xwindow     COMMAND test_xwindow)
+add_test(NAME test_process     COMMAND test_process echo "stow process test")
+add_test(NAME test_stow        COMMAND test_stow)
+add_test(NAME test_fullscreen  COMMAND test_fullscreen)
+add_test(NAME test_grid        COMMAND test_grid ${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini 3)
+add_test(NAME test_monitor     COMMAND test_monitor)
+add_test(NAME test_layout      COMMAND test_layout)
+add_test(NAME test_clickthrough COMMAND test_clickthrough)
 
 message(STATUS "end of test creation")
