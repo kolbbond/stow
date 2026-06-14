@@ -93,10 +93,50 @@ static void test_cell_and_hud() {
 	CHECK(cfg.cells[2].fields.size() == 3 && cfg.cells[2].fields[1] == "fps");
 }
 
+static void test_finalize() {
+	// no row_heights/col_widths => uniform; cells without 'at' => fill order
+	std::string path = write_tmp("finalize.ini",
+		"[grid]\n"
+		"rows = 1\n"
+		"cols = 2\n"
+		"[cell]\n"
+		"cmd = date\n"
+		"[cell]\n"
+		"cmd = uptime\n");
+	stow::HudConfig cfg = stow::HudConfig::load(path);
+	CHECK(cfg.error.empty());
+	CHECK(cfg.valid());
+	CHECK(cfg.grid.row_heights.size() == 1 && cfg.grid.row_heights[0] == 100);
+	CHECK(cfg.grid.col_widths.size() == 2);
+	CHECK(cfg.cells[0].row == 0 && cfg.cells[0].col == 0);  // fill order
+	CHECK(cfg.cells[1].row == 0 && cfg.cells[1].col == 1);
+}
+
+static void test_validation_errors() {
+	// rows/cols zero => invalid
+	std::string p1 = write_tmp("bad_grid.ini", "[grid]\nrows = 0\ncols = 2\n");
+	stow::HudConfig c1 = stow::HudConfig::load(p1);
+	CHECK(!c1.valid());
+
+	// more cells than grid slots => invalid
+	std::string p2 = write_tmp("toomany.ini",
+		"[grid]\nrows = 1\ncols = 1\n[cell]\ncmd=a\n[cell]\ncmd=b\n");
+	stow::HudConfig c2 = stow::HudConfig::load(p2);
+	CHECK(!c2.valid());
+
+	// explicit 'at' out of range => error recorded
+	std::string p3 = write_tmp("oob.ini",
+		"[grid]\nrows = 1\ncols = 1\n[cell]\nat = 5,5\ncmd=a\n");
+	stow::HudConfig c3 = stow::HudConfig::load(p3);
+	CHECK(!c3.valid());
+}
+
 int main() {
 	test_missing_file();
 	test_grid_section();
 	test_cell_and_hud();
+	test_finalize();
+	test_validation_errors();
 	if(g_failures) { std::cerr << g_failures << " checks failed\n"; return 1; }
 	std::cout << "all hud_config tests passed\n";
 	return 0;

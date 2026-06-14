@@ -165,9 +165,30 @@ inline HudConfig HudConfig::load(const std::string& path) {
 		}
 	}
 
+	// --- finalize ---
+	// default to uniform percentages when not given
+	if(cfg.grid.rows > 0 && cfg.grid.cols > 0) {
+		GridConfig uni = GridConfig::uniform(cfg.grid.rows, cfg.grid.cols);
+		if(cfg.grid.row_heights.empty()) cfg.grid.row_heights = uni.row_heights;
+		if(cfg.grid.col_widths.empty()) cfg.grid.col_widths = uni.col_widths;
+	}
+	cfg.grid.fit_to_cells = cfg.fit_to_cells;
+
+	// resolve command default + fill-order placement
+	int next = 0;
 	for(CellSpec& c : cfg.cells) {
 		if(!c.is_hud && c.widget.empty()) c.widget = "command";
+		if(c.row < 0 || c.col < 0) {
+			if(cfg.grid.cols > 0) { c.row = next / cfg.grid.cols; c.col = next % cfg.grid.cols; }
+		}
+		next++;
+		if(cfg.grid.rows > 0 && cfg.grid.cols > 0 &&
+			(c.row >= cfg.grid.rows || c.col >= cfg.grid.cols)) {
+			add_err("cell out of grid range: " + std::to_string(c.row) + "," + std::to_string(c.col));
+		}
 	}
+
+	if(cfg.grid.rows <= 0 || cfg.grid.cols <= 0) add_err("grid rows/cols must be > 0");
 
 	return cfg;
 }
