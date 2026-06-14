@@ -10,14 +10,12 @@
 #include "ptyprocess.hpp"
 #include "xwindow.hpp"
 
-#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 #include <chrono>
 #include <ctime>
-#include <cctype>
 #include <cstdlib>
 #include <iomanip>
 #include <unistd.h>

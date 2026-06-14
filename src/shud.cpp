@@ -8,7 +8,6 @@
 
 #include <X11/keysym.h>
 
-#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
