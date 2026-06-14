@@ -25,8 +25,12 @@
 
 typedef std::shared_ptr<class XWindow> ShXWindowPr;
 
-class XWindow : public StowWindow {
+class XWindow : public StowWindow, public std::enable_shared_from_this<XWindow> {
 public:
+	ShXWindowPr shared_self() {
+		return std::static_pointer_cast<XWindow>(shared_from_this());
+	}
+
 	// Configuration
 	stow::WindowConfig _config;
 
