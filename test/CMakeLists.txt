@@ -10,6 +10,7 @@ set(test_list
     test_grid.cpp
     test_monitor.cpp
     test_layout.cpp
+    test_hud_config.cpp
     test_clickthrough.cpp
 )
 
@@ -34,6 +35,7 @@ add_test(NAME test_fullscreen  COMMAND test_fullscreen)
 add_test(NAME test_grid        COMMAND test_grid ${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini 3)
 add_test(NAME test_monitor     COMMAND test_monitor)
 add_test(NAME test_layout      COMMAND test_layout)
+add_test(NAME test_hud_config  COMMAND test_hud_config)
 add_test(NAME test_clickthrough COMMAND test_clickthrough)
 
 message(STATUS "end of test creation")
