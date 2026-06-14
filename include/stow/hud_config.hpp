@@ -147,8 +147,8 @@ inline HudConfig HudConfig::load(const std::string& path) {
 			CellSpec& c = cfg.cells.back();
 			if(key == "at") {
 				std::vector<int> rc = detail::csv_ints(val);
-				if(rc.size() == 2) { c.row = rc[0]; c.col = rc[1]; }
-				else add_err("bad 'at' (want r,c): " + val);
+				if(rc.size() == 2 && rc[0] >= 0 && rc[1] >= 0) { c.row = rc[0]; c.col = rc[1]; }
+				else add_err("bad 'at' (want non-negative r,c): " + val);
 			}
 			else if(key == "widget") c.widget = detail::lower(val);
 			else if(key == "cmd") c.cmd = val;
@@ -162,6 +162,10 @@ inline HudConfig HudConfig::load(const std::string& path) {
 			else if(key == "alpha") { try { c.alpha = std::stod(val); } catch(...) { add_err("bad alpha: " + val); } }
 			else if(key == "align") c.align = val.empty() ? 0 : val[0];
 			else add_err("unknown cell key: " + key);
+		}
+		else {
+			add_err(section.empty() ? ("key outside any section: " + key)
+			                        : ("key in unknown section [" + section + "]: " + key));
 		}
 	}
 
@@ -185,6 +189,17 @@ inline HudConfig HudConfig::load(const std::string& path) {
 		if(cfg.grid.rows > 0 && cfg.grid.cols > 0 &&
 			(c.row >= cfg.grid.rows || c.col >= cfg.grid.cols)) {
 			add_err("cell out of grid range: " + std::to_string(c.row) + "," + std::to_string(c.col));
+		}
+	}
+
+	// detect overlapping placements (duplicate explicit 'at', or fill-order clashing with one)
+	if(cfg.grid.rows > 0 && cfg.grid.cols > 0) {
+		std::vector<bool> occupied(cfg.grid.rows * cfg.grid.cols, false);
+		for(const CellSpec& c : cfg.cells) {
+			if(c.row < 0 || c.col < 0 || c.row >= cfg.grid.rows || c.col >= cfg.grid.cols) continue;
+			int idx = c.row * cfg.grid.cols + c.col;
+			if(occupied[idx]) add_err("duplicate cell at: " + std::to_string(c.row) + "," + std::to_string(c.col));
+			else occupied[idx] = true;
 		}
 	}
 

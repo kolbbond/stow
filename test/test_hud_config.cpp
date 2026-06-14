@@ -131,6 +131,25 @@ static void test_validation_errors() {
 	CHECK(!c3.valid());
 }
 
+static void test_robustness() {
+	// negative 'at' is a typo, not a fill-order request => error
+	std::string p1 = write_tmp("neg_at.ini",
+		"[grid]\nrows = 1\ncols = 2\n[cell]\nat = -1,0\ncmd=a\n");
+	stow::HudConfig c1 = stow::HudConfig::load(p1);
+	CHECK(!c1.valid());
+
+	// key before any section => error (catches stale flat-format configs)
+	std::string p2 = write_tmp("no_section.ini", "rows = 2\n[grid]\nrows = 1\ncols = 1\n");
+	stow::HudConfig c2 = stow::HudConfig::load(p2);
+	CHECK(!c2.valid());
+
+	// two cells placed at the same coordinate => error (not a silent overwrite)
+	std::string p3 = write_tmp("dup_at.ini",
+		"[grid]\nrows = 2\ncols = 2\n[cell]\nat = 0,0\ncmd=a\n[cell]\nat = 0,0\ncmd=b\n");
+	stow::HudConfig c3 = stow::HudConfig::load(p3);
+	CHECK(!c3.valid());
+}
+
 #ifdef HUD_TEST_INI
 static void test_real_fixture() {
 	stow::HudConfig cfg = stow::HudConfig::load(HUD_TEST_INI);
@@ -149,6 +168,7 @@ int main() {
 	test_cell_and_hud();
 	test_finalize();
 	test_validation_errors();
+	test_robustness();
 #ifdef HUD_TEST_INI
 	test_real_fixture();
 #endif
