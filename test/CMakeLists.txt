@@ -38,4 +38,7 @@ add_test(NAME test_layout      COMMAND test_layout)
 add_test(NAME test_hud_config  COMMAND test_hud_config)
 add_test(NAME test_clickthrough COMMAND test_clickthrough)
 
+target_compile_definitions(test_hud_config PRIVATE
+    HUD_TEST_INI="${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini")
+
 message(STATUS "end of test creation")

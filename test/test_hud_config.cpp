@@ -131,12 +131,27 @@ static void test_validation_errors() {
 	CHECK(!c3.valid());
 }
 
+#ifdef HUD_TEST_INI
+static void test_real_fixture() {
+	stow::HudConfig cfg = stow::HudConfig::load(HUD_TEST_INI);
+	CHECK(cfg.error.empty());
+	CHECK(cfg.valid());
+	CHECK(cfg.grid.rows >= 1 && cfg.grid.cols >= 1);
+	bool has_hud = false;
+	for(const auto& c : cfg.cells) if(c.is_hud) has_hud = true;
+	CHECK(has_hud);
+}
+#endif
+
 int main() {
 	test_missing_file();
 	test_grid_section();
 	test_cell_and_hud();
 	test_finalize();
 	test_validation_errors();
+#ifdef HUD_TEST_INI
+	test_real_fixture();
+#endif
 	if(g_failures) { std::cerr << g_failures << " checks failed\n"; return 1; }
 	std::cout << "all hud_config tests passed\n";
 	return 0;
