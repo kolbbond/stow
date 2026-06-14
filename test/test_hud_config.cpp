@@ -53,9 +53,50 @@ static void test_grid_section() {
 	CHECK(cfg.toggle_key == "ctrl+space");
 }
 
+static void test_cell_and_hud() {
+	std::string path = write_tmp("cells.ini",
+		"[grid]\n"
+		"rows = 2\n"
+		"cols = 2\n"
+		"row_heights = 50,50\n"
+		"col_widths = 50,50\n"
+		"[cell]\n"
+		"at = 0,0\n"
+		"cmd = btop\n"
+		"fg = #00ff00\n"
+		"period = 2\n"
+		"[cell]\n"
+		"at = 0,1\n"
+		"widget = number\n"
+		"label = cores\n"
+		"cmd = nproc\n"
+		"[hud]\n"
+		"at = 1,0\n"
+		"fields = time, fps, mouse\n"
+		"fg = #ffaa00\n");
+	stow::HudConfig cfg = stow::HudConfig::load(path);
+	CHECK(cfg.error.empty());
+	CHECK(cfg.cells.size() == 3);
+	// cell 0: command (default widget)
+	CHECK(cfg.cells[0].row == 0 && cfg.cells[0].col == 0);
+	CHECK(cfg.cells[0].cmd == "btop");
+	CHECK(cfg.cells[0].widget == "command");
+	CHECK(cfg.cells[0].fg == "#00ff00");
+	CHECK(cfg.cells[0].period == 2);
+	// cell 1: explicit number widget
+	CHECK(cfg.cells[1].widget == "number");
+	CHECK(cfg.cells[1].label == "cores");
+	CHECK(cfg.cells[1].cmd == "nproc");
+	// cell 2: hud
+	CHECK(cfg.cells[2].is_hud == true);
+	CHECK(cfg.cells[2].widget == "hud");
+	CHECK(cfg.cells[2].fields.size() == 3 && cfg.cells[2].fields[1] == "fps");
+}
+
 int main() {
 	test_missing_file();
 	test_grid_section();
+	test_cell_and_hud();
 	if(g_failures) { std::cerr << g_failures << " checks failed\n"; return 1; }
 	std::cout << "all hud_config tests passed\n";
 	return 0;

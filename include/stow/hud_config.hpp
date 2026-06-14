@@ -115,6 +115,12 @@ inline HudConfig HudConfig::load(const std::string& path) {
 
 		if(line.front() == '[' && line.back() == ']') {
 			section = detail::lower(detail::trim(line.substr(1, line.size() - 2)));
+			if(section == "cell" || section == "hud") {
+				cfg.cells.emplace_back();
+				CellSpec& c = cfg.cells.back();
+				c.is_hud = (section == "hud");
+				c.widget = c.is_hud ? "hud" : "";  // command default resolved in finalize
+			}
 			continue;
 		}
 
@@ -136,6 +142,31 @@ inline HudConfig HudConfig::load(const std::string& path) {
 			else if(key == "toggle_key") cfg.toggle_key = val;
 			else add_err("unknown grid key: " + key);
 		}
+		else if(section == "cell" || section == "hud") {
+			if(cfg.cells.empty()) { add_err("key outside cell: " + key); continue; }
+			CellSpec& c = cfg.cells.back();
+			if(key == "at") {
+				std::vector<int> rc = detail::csv_ints(val);
+				if(rc.size() == 2) { c.row = rc[0]; c.col = rc[1]; }
+				else add_err("bad 'at' (want r,c): " + val);
+			}
+			else if(key == "widget") c.widget = detail::lower(val);
+			else if(key == "cmd") c.cmd = val;
+			else if(key == "label") c.label = val;
+			else if(key == "fields") c.fields = detail::csv_strs(val);
+			else if(key == "max") { try { c.max = std::stod(val); } catch(...) { add_err("bad max: " + val); } }
+			else if(key == "period") c.period = detail::to_int(val, -1);
+			else if(key == "fg") c.fg = val;
+			else if(key == "bg") c.bg = val;
+			else if(key == "font") c.font = val;
+			else if(key == "alpha") { try { c.alpha = std::stod(val); } catch(...) { add_err("bad alpha: " + val); } }
+			else if(key == "align") c.align = val.empty() ? 0 : val[0];
+			else add_err("unknown cell key: " + key);
+		}
+	}
+
+	for(CellSpec& c : cfg.cells) {
+		if(!c.is_hud && c.widget.empty()) c.widget = "command";
 	}
 
 	return cfg;
