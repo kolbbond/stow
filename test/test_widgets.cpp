@@ -1,4 +1,5 @@
 // headless unit tests for widget value logic
+#include "stow/widgets.hpp"
 #include "stow/widget.hpp"
 #include "stow/capture.hpp"
 
@@ -16,6 +17,19 @@ struct NullWidget : stow::Widget {
 	void update() override { updates++; }
 	void render(stow::RenderCtx&) override {}
 };
+}
+
+static void test_value_logic() {
+	// number_text: label + value on two lines; missing label => value only
+	CHECK(stow::number_text("cores", "8") == "cores\n8");
+	CHECK(stow::number_text("", "8") == "8");
+
+	// bar_fraction: clamp to [0,1]; non-numeric => 0
+	CHECK(stow::bar_fraction("50", 100.0) == 0.5);
+	CHECK(stow::bar_fraction("150", 100.0) == 1.0);   // clamp high
+	CHECK(stow::bar_fraction("-5", 100.0) == 0.0);    // clamp low
+	CHECK(stow::bar_fraction("abc", 100.0) == 0.0);   // non-numeric
+	CHECK(stow::bar_fraction("1", 0.0) == 0.0);       // max<=0 guarded
 }
 
 static void test_capture() {
@@ -39,6 +53,7 @@ static void test_interface() {
 }
 
 int main() {
+	test_value_logic();
 	test_capture();
 	test_interface();
 	if(g_failures) { std::cerr << g_failures << " checks failed\n"; return 1; }
