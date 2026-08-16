@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "stow/widget.hpp"
-#include "stow/capture.hpp"
+#include "hud/capture.hpp"
 #include "proc/ptyprocess.hpp"
 
 namespace stow {

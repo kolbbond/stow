@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "config.hpp"
+#include "stow/config.hpp"
 
 namespace stow {
 

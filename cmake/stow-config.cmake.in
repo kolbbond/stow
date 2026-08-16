@@ -1,0 +1,12 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# libstow.a links these privately, so a consumer needs them present at link
+# time even though it never sees an X11 header.
+find_dependency(X11)
+find_dependency(Freetype)
+
+include("${CMAKE_CURRENT_LIST_DIR}/stow-targets.cmake")
+
+check_required_components(stow)

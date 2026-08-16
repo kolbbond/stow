@@ -1,6 +1,6 @@
 # cmake
 cmake_minimum_required(VERSION 3.30)
-project(stow)
+project(stow VERSION 0.1.0 LANGUAGES CXX)
 
 # Require C++20 for designated initializers
 set(CMAKE_CXX_STANDARD 20)
@@ -131,5 +131,37 @@ target_link_libraries(shud PRIVATE stow::stow)
 enable_testing()
 add_subdirectory(test)
 
-# install
-install(TARGETS stow_bin shud DESTINATION bin)
+# ---- install / package ------------------------------------------------------
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+install(TARGETS stow
+    EXPORT stow-targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+install(TARGETS stow_bin shud RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Public headers only. src/ is never installed.
+install(DIRECTORY include/stow DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.hpp")
+
+install(EXPORT stow-targets
+    FILE stow-targets.cmake
+    NAMESPACE stow::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/stow)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stow-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/stow-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/stow)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/stow-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/stow-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/stow-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/stow)

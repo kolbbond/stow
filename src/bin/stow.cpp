@@ -1,5 +1,5 @@
 // stow - text overlay: runs a command and renders its output in an overlay.
-#include "stow/cli.hpp"
+#include "bin/cli.hpp"
 #include "stow/config.hpp"
 #include "stow/overlay.hpp"
 #include "proc/pipeprocess.hpp"
