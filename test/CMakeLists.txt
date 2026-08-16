@@ -33,9 +33,11 @@ endforeach()
 
 # test_overlay is a consumer of the public API only - it builds with nothing
 # but include/ and libstow.a. If it ever needs stowlegacy, the API has a hole.
-add_executable(test_overlay test_overlay.cpp)
-target_link_libraries(test_overlay PRIVATE stow::stow)
-target_include_directories(test_overlay PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+foreach(apitest test_overlay test_screen)
+    add_executable(${apitest} ${apitest}.cpp)
+    target_link_libraries(${apitest} PRIVATE stow::stow)
+    target_include_directories(${apitest} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endforeach()
 
 # register tests; the demo runners need args (a command / a config + timeout)
 add_test(NAME test_xwindow     COMMAND test_xwindow)
@@ -52,12 +54,13 @@ add_test(NAME test_hud_config  COMMAND test_hud_config)
 add_test(NAME test_clickthrough COMMAND test_clickthrough)
 add_test(NAME test_widgets     COMMAND test_widgets)
 add_test(NAME test_overlay     COMMAND test_overlay)
+add_test(NAME test_screen      COMMAND test_screen)
 
 # Tests that need a real X display report 77 (skip) instead of failing when
 # $DISPLAY is unset, so a headless run stays meaningful.
 set_tests_properties(
     test_xwindow test_fullscreen test_clickthrough test_dashboard test_stow
-    test_widgets test_monitor test_overlay
+    test_widgets test_monitor test_overlay test_screen
     PROPERTIES SKIP_RETURN_CODE 77)
 
 target_compile_definitions(test_hud_config PRIVATE

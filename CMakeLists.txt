@@ -73,6 +73,7 @@ endif()
 # stow library - public API in include/, platform code private in src/
 add_library(stow STATIC
     src/overlay.cpp
+    src/x11/screen.cpp
 )
 add_library(stow::stow ALIAS stow)
 
@@ -125,4 +126,4 @@ enable_testing()
 add_subdirectory(test)
 
 # install
-install(TARGETS stow shud DESTINATION bin)
+install(TARGETS stow_bin shud DESTINATION bin)
