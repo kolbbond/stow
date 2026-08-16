@@ -101,8 +101,7 @@ public:
 	}
 
 	// read output from file pipe
-	void read_text(ShWindowPtr win = nullptr) override {
-		(void)win;
+	void read_text() override {
 		char delimiter = _config.delimiter;
 		int dlen = 1;
 		static char* text;

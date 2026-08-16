@@ -20,16 +20,30 @@
 #include <vector>
 
 #include "stow/config.hpp"
+#include "stow/text.hpp"
 #include "legacy_error.hpp"
-#include "x11/stow_window.hpp"
 
 typedef std::shared_ptr<class XWindow> ShXWindowPr;
 
-class XWindow : public StowWindow, public std::enable_shared_from_this<XWindow> {
+class XWindow {
 public:
-	ShXWindowPr shared_self() {
-		return std::static_pointer_cast<XWindow>(shared_from_this());
-	}
+	// Geometry / visibility state, absorbed from the deleted StowWindow base.
+	unsigned int _screen_width = 0;
+	unsigned int _screen_height = 0;
+	unsigned int _window_width = 0;
+	unsigned int _window_height = 0;
+	bool _hidden = true;
+	bool _dirty = true;
+	bool _overlay = true;
+	bool _override_redirect = true;
+	bool _transparent_background = true;
+	bool _fullscreen = false;
+	bool _borderless = false;
+	bool _use_fixed_geometry = false;
+	int _fixed_x = 0;
+	int _fixed_y = 0;
+	unsigned int _fixed_w = 0;
+	unsigned int _fixed_h = 0;
 
 	// Configuration
 	stow::WindowConfig _config;
@@ -144,7 +158,7 @@ public:
 		if(_dpy) XCloseDisplay(_dpy);
 	}
 
-	void setup() override {
+	void setup() {
 		_dpy = XOpenDisplay(nullptr);
 		if(!_dpy) { Error::die("cannot open display"); }
 
@@ -241,7 +255,7 @@ public:
 		XSetClassHint(_dpy, _win, &class_hint);
 	}
 
-	void draw(const std::string& text) override {
+	void draw(const std::string& text) {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int prev_w = _window_width;
 		unsigned int prev_h = _window_height;
@@ -297,7 +311,7 @@ public:
 		}
 	}
 
-	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) override {
+	void draw_region(const std::string& text, int rx, int ry, unsigned int rw, unsigned int rh) {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int prev_w = _window_width;
 		unsigned int prev_h = _window_height;
@@ -343,7 +357,7 @@ public:
 		return &_color_cache.emplace(rgb, color).first->second;
 	}
 
-	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) override {
+	void draw_spans(const std::vector<std::vector<stow::ColorSpan>>& lines) {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int rw = 0;
 		unsigned int rh = 0;
@@ -357,7 +371,7 @@ public:
 		draw_region_spans(lines, 0, 0, rw, rh);
 	}
 
-	void draw_region_spans(const std::vector<std::vector<ColorSpan>>& lines, int rx, int ry, unsigned int rw, unsigned int rh) override {
+	void draw_region_spans(const std::vector<std::vector<stow::ColorSpan>>& lines, int rx, int ry, unsigned int rw, unsigned int rh) {
 		int borderpx = (_borderless || _config.borderless) ? 0 : _config.border_px;
 		unsigned int prev_w = _window_width;
 		unsigned int prev_h = _window_height;
@@ -378,7 +392,7 @@ public:
 				x = rx + (rw - line_width) / 2;
 			}
 
-			for(const ColorSpan& sp : spans) {
+			for(const stow::ColorSpan& sp : spans) {
 				if(sp.text.empty()) continue;
 				XftColor* c = get_color(sp.rgb);
 				XftDrawStringUtf8(
@@ -395,7 +409,7 @@ public:
 		clear_clip();
 	}
 
-	void run() override {
+	void run() {
 		// A zero-sized window is nothing to show, and XMoveResizeWindow with a
 		// zero extent is a BadValue. This happens legitimately before the first
 		// draw in size-to-content mode, and whenever the command produced no
@@ -544,9 +558,9 @@ private:
 		XftDrawSetClip(_xdraw, nullptr);
 	}
 
-	int measure_line_width(const std::vector<ColorSpan>& spans) {
+	int measure_line_width(const std::vector<stow::ColorSpan>& spans) {
 		int width = 0;
-		for(const ColorSpan& sp : spans) {
+		for(const stow::ColorSpan& sp : spans) {
 			XGlyphInfo ex;
 			XftTextExtentsUtf8(_dpy, _xfont, reinterpret_cast<const unsigned char*>(sp.text.c_str()), sp.text.size(), &ex);
 			width += ex.xOff;
@@ -555,9 +569,5 @@ private:
 	}
 };
 
-// Factory implementation for POSIX
-inline ShWindowPtr StowWindow::create() {
-	return std::static_pointer_cast<StowWindow>(XWindow::create());
-}
 
 #endif // STOW_POSIX

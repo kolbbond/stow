@@ -58,6 +58,10 @@ add_test(NAME test_screen      COMMAND test_screen)
 add_test(NAME test_cursor      COMMAND test_cursor 3)
 add_test(NAME test_hud         COMMAND test_hud ${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini)
 
+# Boundary guard: fails if an X11 include ever reappears under include/.
+add_test(NAME test_no_x11_in_public_headers
+         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test_no_x11_in_public_headers.sh ${CMAKE_SOURCE_DIR})
+
 # Tests that need a real X display. Two properties:
 #   SKIP_RETURN_CODE 77 - they report skipped, not failed, when $DISPLAY is
 #     unset, so a headless run stays meaningful.

@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdlib>
 
-#include "color_span.hpp"
+#include "stow/text.hpp"
 #include "config.h"
 
 struct ScreenBuffer {
@@ -365,13 +365,13 @@ inline std::string compose_screen(const ScreenBuffer& sb, size_t max_chars) {
 	return out;
 }
 
-inline std::vector<std::vector<ColorSpan>> compose_screen_spans(const ScreenBuffer& sb, size_t max_chars) {
-	std::vector<std::vector<ColorSpan>> out;
+inline std::vector<std::vector<stow::ColorSpan>> compose_screen_spans(const ScreenBuffer& sb, size_t max_chars) {
+	std::vector<std::vector<stow::ColorSpan>> out;
 	size_t total = 0;
 	for(size_t i = 0; i < sb.lines.size(); i++) {
 		const std::vector<ScreenBuffer::Cell>& line = sb.lines[i];
-		std::vector<ColorSpan> spans;
-		ColorSpan cur;
+		std::vector<stow::ColorSpan> spans;
+		stow::ColorSpan cur;
 		cur.rgb = 0;
 		for(size_t j = 0; j < line.size(); j++) {
 			if(total >= max_chars) break;

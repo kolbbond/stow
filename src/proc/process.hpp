@@ -22,8 +22,6 @@
 #include "stow/config.hpp"
 
 // Forward declare window types
-class StowWindow;
-using ShWindowPtr = std::shared_ptr<StowWindow>;
 
 class XWindow;
 using ShXWindowPr = std::shared_ptr<XWindow>;
@@ -112,5 +110,7 @@ public:
 	virtual void start_cmd(std::string cmd) = 0;
 
 	// read output from file pipe - accepts abstract window pointer
-	virtual void read_text(ShWindowPtr win = nullptr) = 0;
+	// Drain the child's output. Rendering variants that take a
+	// stow::Overlay& live on the concrete subclasses.
+	virtual void read_text() = 0;
 };

@@ -1,65 +1,51 @@
-// test stow functionality - runs a command and exits after timeout
-#include "stow/config.hpp"
-#include "skip_if_headless.hpp"
-#include "platform.hpp"
-
-#if STOW_POSIX
-#include "proc/pipeprocess.hpp"
+// The stow binary's core loop: run a command, render its output, repeat.
+// Needs $DISPLAY; skips (77) without one.
+#include "stow/overlay.hpp"
 #include "proc/ptyprocess.hpp"
-#include "x11/window.hpp"
-#include <chrono>
-#include <unistd.h>
-#elif STOW_WINDOWS
-#include "win32pipeprocess.hpp"
-#include "win32ptyprocess.hpp"
-#include "win32window.hpp"
-#include <windows.h>
-#endif
+#include "check.hpp"
+#include "skip_if_headless.hpp"
 
-#include "x11/stow_window.hpp"
+#include <chrono>
 
 int main() {
 	SKIP_IF_NO_DISPLAY();
 
-	// Create window config
-	stow::WindowConfig win_cfg;
-	win_cfg.px = stow::Position(10);
-	win_cfg.py = stow::Position(10);
-	win_cfg.overlay = true;
+	stow::OverlayConfig cfg;
+	cfg.x = stow::Position(10);
+	cfg.y = stow::Position(10);
+	cfg.clickthrough = true;
+	cfg.font = "monospace:size=10";
 
-#if STOW_POSIX
-	// test overlay mode
-	ShXWindowPr xwin = XWindow::create(win_cfg);
-	xwin->setup();
+	stow::Error err;
+	std::optional<stow::Overlay> ov = stow::Overlay::create(cfg, &err);
+	CHECK(ov.has_value());
+	if(!ov) {
+		std::fprintf(stderr, "create failed: %s\n", err.message.c_str());
+		CHECK_REPORT();
+	}
+	ov->show();
 
-	auto start = std::chrono::steady_clock::now();
-	constexpr double timeout_sec = 3.0;
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
 	int iterations = 0;
 
-	while (true) {
-		auto now = std::chrono::steady_clock::now();
-		if (std::chrono::duration<double>(now - start).count() >= timeout_sec) break;
-
-		// run a simple command
-		ShProcessPr process = PTYProcess::create();
-		process->setup();
-		process->start_cmd("echo", {"stow test iteration", std::to_string(iterations++)});
-		process->read_text(xwin);
-
-		usleep(100000); // 100ms between iterations
+	while(std::chrono::steady_clock::now() < deadline) {
+		auto pty = PTYProcess::create();
+		pty->setup();
+		pty->start_cmd("date", {});
+		pty->read_text(*ov);
+		iterations++;
 	}
 
-	// test normal mode
-	stow::WindowConfig normal_cfg;
-	normal_cfg.overlay = false;
+	std::fprintf(stderr, "%d command iterations in 3s\n", iterations);
 
-	ShXWindowPr xwin2 = XWindow::create(normal_cfg);
-	xwin2->setup();
+	// The loop actually ran the command and kept the overlay alive.
+	CHECK(iterations > 0);
+	CHECK(ov->open());
 
-	xwin2->draw("normal mode test\n");
-	xwin2->run();
-	usleep(500000); // show for 500ms
-#endif
+	// Size-to-content: after rendering `date`, the window has a real extent.
+	stow::Rect g = ov->geometry();
+	CHECK(g.width > 0);
+	CHECK(g.height > 0);
 
-	return 0;
+	CHECK_REPORT();
 }

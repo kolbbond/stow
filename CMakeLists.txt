@@ -95,9 +95,13 @@ if(X11_Xinerama_FOUND)
 endif()
 target_compile_definitions(stow PRIVATE ${STOW_COMPILE_DEFINITIONS})
 
-# Transitional: stow/shud and the older tests still include X11 headers
-# directly, so they need the private include dir and the X11 libs. Later tasks
-# port them onto the public API and this target goes away.
+# Internal target: puts src/ on the include path so in-tree code can reach the
+# private headers (proc/, x11/, hud/). Used by the stow binary, which drives
+# PTYProcess directly, and by tests that exercise internals.
+#
+# NOT part of the installed package. External consumers link stow::stow, which
+# exposes include/ only - shud is built that way on purpose, as the proof that
+# the full API is reachable without this.
 add_library(stowlegacy INTERFACE)
 target_include_directories(stowlegacy INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include

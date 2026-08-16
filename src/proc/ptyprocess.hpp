@@ -182,7 +182,7 @@ public:
 		}
 
 		if(drew && xwin != nullptr) {
-			std::vector<std::vector<ColorSpan>> spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
+			std::vector<std::vector<stow::ColorSpan>> spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
 			xwin->draw_spans(spans);
 			xwin->run();
 		}
@@ -226,7 +226,7 @@ public:
 		}
 
 		if(drew && xwin != nullptr) {
-			std::vector<std::vector<ColorSpan>> spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
+			std::vector<std::vector<stow::ColorSpan>> spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
 			xwin->draw_region_spans(spans, rx, ry, rw, rh);
 		}
 
@@ -351,11 +351,9 @@ public:
 	}
 
 	// read output from file pipe - accepts abstract window pointer
-	void read_text(ShWindowPtr win = nullptr) override {
+	void read_text() override {
 		dprintf("read_text\n");
 
-		// Cast to XWindow for X11-specific features
-		ShXWindowPr xwin = std::dynamic_pointer_cast<XWindow>(win);
 
 		while(!is_done()) {
 			struct pollfd pfd;
@@ -369,7 +367,7 @@ public:
 				die("poll");
 			}
 			if(pr > 0 || pr == 0) {
-				pump(xwin);
+				pump();
 			}
 		}
 

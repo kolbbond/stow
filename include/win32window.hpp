@@ -19,7 +19,7 @@
 #include <unordered_map>
 
 #include "config.h"
-#include "color_span.hpp"
+#include "stow/text.hpp"
 #include "window.hpp"
 
 typedef std::shared_ptr<class Win32Window> ShWin32WindowPr;
@@ -378,7 +378,7 @@ public:
 		_dirty = true;
 	}
 
-	void draw_spans(const std::vector<std::vector<ColorSpan>>& lines) override {
+	void draw_spans(const std::vector<std::vector<stow::ColorSpan>>& lines) override {
 		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
 
 		HFONT prevfont = (HFONT)SelectObject(_memdc, _font);
@@ -390,7 +390,7 @@ public:
 		unsigned int rh = 0;
 		for(size_t i = 0; i < lines.size(); i++) {
 			int line_width = 0;
-			for(const ColorSpan& sp : lines[i]) {
+			for(const stow::ColorSpan& sp : lines[i]) {
 				SIZE sz;
 				GetTextExtentPoint32A(_memdc, sp.text.c_str(), (int)sp.text.size(), &sz);
 				line_width += sz.cx;
@@ -405,7 +405,7 @@ public:
 		draw_region_spans(lines, 0, 0, rw, rh);
 	}
 
-	void draw_region_spans(const std::vector<std::vector<ColorSpan>>& lines, int rx, int ry,
+	void draw_region_spans(const std::vector<std::vector<stow::ColorSpan>>& lines, int rx, int ry,
 		unsigned int rw, unsigned int rh) override {
 		int borderpx = (_borderless || gconf.borderless) ? 0 : gconf.borderpx;
 
@@ -444,9 +444,9 @@ public:
 
 		int y = ry + borderpx;
 		for(size_t i = 0; i < lines.size(); i++) {
-			const std::vector<ColorSpan>& spans = lines[i];
+			const std::vector<stow::ColorSpan>& spans = lines[i];
 			int line_width = 0;
-			for(const ColorSpan& sp : spans) {
+			for(const stow::ColorSpan& sp : spans) {
 				SIZE sz;
 				GetTextExtentPoint32A(_memdc, sp.text.c_str(), (int)sp.text.size(), &sz);
 				line_width += sz.cx;
@@ -459,7 +459,7 @@ public:
 				if(line_width < (int)rw) x = rx + (rw - line_width) / 2;
 			}
 
-			for(const ColorSpan& sp : spans) {
+			for(const stow::ColorSpan& sp : spans) {
 				if(sp.text.empty()) continue;
 				SetTextColor(_memdc, rgb_to_colorref(sp.rgb));
 				SIZE sz;
