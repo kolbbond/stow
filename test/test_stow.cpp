@@ -1,5 +1,6 @@
 // test stow functionality - runs a command and exits after timeout
 #include "stow/config.hpp"
+#include "skip_if_headless.hpp"
 #include "platform.hpp"
 
 #if STOW_POSIX
@@ -18,6 +19,8 @@
 #include "window.hpp"
 
 int main() {
+	SKIP_IF_NO_DISPLAY();
+
 	// Create window config
 	stow::WindowConfig win_cfg;
 	win_cfg.px = stow::Position(10);

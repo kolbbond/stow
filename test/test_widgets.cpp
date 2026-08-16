@@ -1,5 +1,6 @@
 // headless unit tests for widget value logic
 #include "stow/widgets.hpp"
+#include "skip_if_headless.hpp"
 #include "stow/widget.hpp"
 #include "stow/capture.hpp"
 
@@ -53,6 +54,8 @@ static void test_interface() {
 }
 
 int main() {
+	SKIP_IF_NO_DISPLAY();
+
 	test_value_logic();
 	test_capture();
 	test_interface();

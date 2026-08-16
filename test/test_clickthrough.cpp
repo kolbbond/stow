@@ -1,6 +1,7 @@
 // Minimal click-through test - reproduces shud's pattern
 // Compare with test_fullscreen which works
 #include "stow/config.hpp"
+#include "skip_if_headless.hpp"
 #include "platform.hpp"
 
 #if STOW_POSIX
@@ -15,6 +16,8 @@
 #include <poll.h>
 
 int main(int argc, char** argv) {
+	SKIP_IF_NO_DISPLAY();
+
 	// Mode selection: run different patterns to find what breaks
 	// 0 = fullscreen (like test_fullscreen - known working)
 	// 1 = fixed geometry (like shud)

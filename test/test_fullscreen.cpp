@@ -1,5 +1,6 @@
 // test fullscreen xwindow
 #include "stow/config.hpp"
+#include "skip_if_headless.hpp"
 #include "platform.hpp"
 
 #if STOW_POSIX
@@ -9,6 +10,8 @@
 #include <chrono>
 
 int main() {
+	SKIP_IF_NO_DISPLAY();
+
 	// Create fullscreen window config
 	stow::WindowConfig cfg;
 	cfg.alpha = 0.2;

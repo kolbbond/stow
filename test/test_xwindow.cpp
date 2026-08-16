@@ -1,5 +1,6 @@
 // test xwindow
 #include "stow/config.hpp"
+#include "skip_if_headless.hpp"
 #include "platform.hpp"
 
 #if STOW_POSIX
@@ -42,6 +43,8 @@ static std::string format_time_now() {
 }
 
 int main() {
+	SKIP_IF_NO_DISPLAY();
+
 	// Create window config
 	stow::WindowConfig cfg;
 	cfg.px = stow::Position(10);
