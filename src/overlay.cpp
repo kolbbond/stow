@@ -1,8 +1,12 @@
 #include "stow/overlay.hpp"
 
+#include "stow/screen.hpp"
+
 #include "x11/window.hpp"
 
 #include <X11/extensions/shape.h>
+
+#include <poll.h>
 
 #include <cstdio>
 
@@ -95,9 +99,27 @@ std::optional<Overlay> Overlay::create(const OverlayConfig& cfg, Error* err) {
 
 	auto impl = std::make_unique<Impl>();
 	impl->cfg = cfg;
-	impl->win = XWindow::create(to_window_config(cfg));
+	WindowConfig wcfg = to_window_config(cfg);
+	impl->win = XWindow::create(wcfg);
 	impl->win->setup();
 	impl->caps = probe_caps(*impl->win, cfg);
+
+	// An explicit size means fixed geometry, which makes XWindow place the
+	// window at _fixed_x/_fixed_y instead of resolving the anchor. Resolve it
+	// once here, now that the size is known, so anchor and size compose
+	// instead of the anchor being silently ignored. It also gives geometry()
+	// a real answer before the first draw.
+	if(!cfg.size.empty()) {
+		Monitor mon = primary_monitor();
+		if(cfg.monitor >= 0) {
+			std::vector<Monitor> all = monitors();
+			if(cfg.monitor < static_cast<int>(all.size())) mon = all[cfg.monitor];
+		}
+		int x = 0, y = 0;
+		wcfg.resolve_anchor(static_cast<int>(mon.width), static_cast<int>(mon.height), static_cast<int>(cfg.size.w),
+			static_cast<int>(cfg.size.h), x, y);
+		impl->win->set_geometry(mon.x + x, mon.y + y, cfg.size.w, cfg.size.h);
+	}
 
 	return Overlay(std::move(impl));
 }
@@ -147,6 +169,63 @@ void Overlay::set_spans(const Lines& lines) {
 	_p->win->_dirty = true;
 }
 
+void Overlay::move_to(int x, int y) {
+	Rect g = geometry();
+	_p->win->set_geometry(x, y, g.width, g.height);
+}
+
+void Overlay::resize(Size s) {
+	Rect g = geometry();
+	_p->win->set_geometry(g.x, g.y, s.w, s.h);
+}
+
+Rect Overlay::geometry() const {
+	Rect r;
+	r.x = _p->win->_fixed_x;
+	r.y = _p->win->_fixed_y;
+	r.width = _p->win->_window_width;
+	r.height = _p->win->_window_height;
+	return r;
+}
+
+void Overlay::begin() {
+	if(_p->closed) return;
+	_p->win->begin_frame();
+}
+
+void Overlay::rect(Rect r, Color c, int thickness) {
+	if(_p->closed) return;
+	if(thickness <= 0)
+		_p->win->fill_rect(r.x, r.y, r.width, r.height, c.rgb());
+	else
+		_p->win->draw_rect_outline(r.x, r.y, r.width, r.height, c.rgb(), thickness);
+}
+
+void Overlay::text(int x, int y, std::string_view s, Color c) {
+	if(_p->closed) return;
+	_p->win->draw_text_at(x, y, std::string(s), c.rgb());
+}
+
+void Overlay::spans(const Lines& lines) {
+	if(_p->closed) return;
+	_p->win->draw_spans(lines);
+}
+
+void Overlay::end() {
+	if(_p->closed) return;
+	_p->win->_dirty = true;
+}
+
+void Overlay::text_in(Rect region, std::string_view s) {
+	if(_p->closed) return;
+	_p->win->draw_region(std::string(s), region.x, region.y, region.width, region.height);
+}
+
+void Overlay::spans_in(Rect region, const Lines& lines) {
+	if(_p->closed) return;
+	_p->win->draw_region_spans(lines, region.x, region.y, region.width, region.height);
+}
+
 bool Overlay::pump() {
 	if(_p->closed) return false;
 
@@ -159,6 +238,26 @@ bool Overlay::pump() {
 
 	if(_p->shown) _p->win->run();
 	return true;
+}
+
+bool Overlay::pump(std::chrono::milliseconds timeout) {
+	if(_p->closed) return false;
+
+	// Block on the X connection until an event arrives or the timeout expires.
+	// This is what gives a caller a frame rate without a busy-spin.
+	if(!XPending(_p->win->_dpy)) {
+		struct pollfd pfd = {_p->win->_xfd, POLLIN, 0};
+		::poll(&pfd, 1, static_cast<int>(timeout.count()));
+	}
+	return pump();
+}
+
+void Overlay::run(std::chrono::milliseconds period, std::function<void(Overlay&)> cb) {
+	while(!_p->closed) {
+		if(cb) cb(*this);
+		if(_p->closed) break;
+		if(!pump(period)) break;
+	}
 }
 
 }  // namespace stow

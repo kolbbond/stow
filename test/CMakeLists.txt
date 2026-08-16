@@ -56,12 +56,30 @@ add_test(NAME test_widgets     COMMAND test_widgets)
 add_test(NAME test_overlay     COMMAND test_overlay)
 add_test(NAME test_screen      COMMAND test_screen)
 
-# Tests that need a real X display report 77 (skip) instead of failing when
-# $DISPLAY is unset, so a headless run stays meaningful.
-set_tests_properties(
+# Tests that need a real X display. Two properties:
+#   SKIP_RETURN_CODE 77 - they report skipped, not failed, when $DISPLAY is
+#     unset, so a headless run stays meaningful.
+#   LABELS x11 - they map windows over the live desktop and take ~16s, which
+#     is disruptive to whoever is using the machine. They are OPT-IN:
+#       ctest              -> headless only (fast, no windows)   [default]
+#       ctest -L x11       -> only the X11 ones
+#       ctest -L '.*'      -> everything
+set(STOW_X11_TESTS
     test_xwindow test_fullscreen test_clickthrough test_dashboard test_stow
-    test_widgets test_monitor test_overlay test_screen
-    PROPERTIES SKIP_RETURN_CODE 77)
+    test_widgets test_monitor test_overlay test_screen)
+
+set_tests_properties(${STOW_X11_TESTS} PROPERTIES
+    SKIP_RETURN_CODE 77
+    LABELS x11)
+
+# Off by default so a routine `ctest` never takes over the desktop of whoever
+# is sitting at the machine. Turn on deliberately:
+#   cmake -S . -B build -DSTOW_TEST_X11=ON
+option(STOW_TEST_X11 "Run the X11 tests, which map windows over the live desktop" OFF)
+if(NOT STOW_TEST_X11)
+    set_tests_properties(${STOW_X11_TESTS} PROPERTIES DISABLED TRUE)
+    message(STATUS "X11 tests disabled (-DSTOW_TEST_X11=ON to enable)")
+endif()
 
 target_compile_definitions(test_hud_config PRIVATE
     HUD_TEST_INI="${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini")

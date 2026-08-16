@@ -439,6 +439,46 @@ public:
 		XSync(_dpy, False);
 	}
 
+	// --- immediate-mode primitives (used by stow::Overlay) ---
+
+	// Clear the backing pixmap to the (possibly transparent) background.
+	void begin_frame() { clear_drawable(); }
+
+	void fill_rect(int x, int y, unsigned int w, unsigned int h, unsigned int rgb) {
+		XSetForeground(_dpy, _xgc, get_color(rgb)->pixel);
+		XFillRectangle(_dpy, _drawable, _xgc, x, y, w, h);
+	}
+
+	void draw_rect_outline(int x, int y, unsigned int w, unsigned int h, unsigned int rgb, int thickness) {
+		if(thickness < 1) thickness = 1;
+		XSetForeground(_dpy, _xgc, get_color(rgb)->pixel);
+		for(int i = 0; i < thickness; i++) {
+			if(w <= static_cast<unsigned int>(2 * i) || h <= static_cast<unsigned int>(2 * i)) break;
+			XDrawRectangle(_dpy, _drawable, _xgc, x + i, y + i, w - 2 * i - 1, h - 2 * i - 1);
+		}
+	}
+
+	// y is the text baseline, matching XftDrawStringUtf8's convention.
+	void draw_text_at(int x, int y, const std::string& s, unsigned int rgb) {
+		XftDrawStringUtf8(_xdraw, get_color(rgb), _xfont, x, y, reinterpret_cast<const unsigned char*>(s.c_str()), s.size());
+	}
+
+	// Explicit geometry, bypassing content measurement.
+	void set_geometry(int x, int y, unsigned int w, unsigned int h) {
+		unsigned int prev_w = _window_width;
+		unsigned int prev_h = _window_height;
+		_use_fixed_geometry = true;
+		_fixed_x = x;
+		_fixed_y = y;
+		_fixed_w = w;
+		_fixed_h = h;
+		_window_width = w;
+		_window_height = h;
+		_hidden = false;
+		resize_drawable_if_needed(prev_w, prev_h);
+		_dirty = true;
+	}
+
 private:
 	void update_window_size(unsigned int w, unsigned int h) {
 		if(_use_fixed_geometry) {

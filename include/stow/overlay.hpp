@@ -9,6 +9,8 @@
 // type, so a consumer needs no X11 include path and links only stow::stow.
 #pragma once
 
+#include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -76,12 +78,36 @@ public:
 	bool open() const;  // shown and not closed
 	Caps caps() const;
 
-	// Content
+	// --- geometry (runtime) ---
+	void move_to(int x, int y);
+	void resize(Size s);
+	Rect geometry() const;
+
+	// --- immediate-mode drawing ---
+	// begin() clears the frame, end() presents it. Calls in between paint in
+	// issue order. This is what per-frame content (a cursor follower, a gauge)
+	// wants; set_text/set_spans are the retained-style convenience over it.
+	void begin();
+	void rect(Rect r, Color c, int thickness = 0);  // thickness 0 => filled
+	void text(int x, int y, std::string_view s, Color c = Color::white());
+	void spans(const Lines& lines);
+	void end();
+
+	// Region-scoped, alignment-aware, clipped drawing - what a grid cell needs.
+	void text_in(Rect region, std::string_view s);
+	void spans_in(Rect region, const Lines& lines);
+
+	// Content (convenience: a whole frame in one call)
 	void set_text(std::string_view text);
 	void set_spans(const Lines& lines);
 
+	// --- loop ---
 	// Services X events and presents. Returns false once closed.
-	bool pump();
+	bool pump();                                   // non-blocking
+	bool pump(std::chrono::milliseconds timeout);  // waits up to timeout on X events
+
+	// Convenience loop for pure-HUD programs: while(pump(period)) cb(*this).
+	void run(std::chrono::milliseconds period, std::function<void(Overlay&)> cb);
 
 private:
 	struct Impl;

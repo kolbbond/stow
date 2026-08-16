@@ -4,6 +4,7 @@
 #include "check.hpp"
 #include "skip_if_headless.hpp"
 
+#include <chrono>
 #include <utility>
 
 int main() {
@@ -62,6 +63,66 @@ int main() {
 	moved.close();
 	CHECK(!moved.open());
 	CHECK(!moved.pump());
+
+	// ---- immediate-mode drawing and runtime geometry ----
+	stow::Overlay draw_ov(stow::OverlayConfig{
+		.size = {200, 80},
+		.font = "monospace:size=10",
+		.clickthrough = true,
+	});
+	draw_ov.show();
+
+	// geometry() reflects the configured size
+	stow::Rect g = draw_ov.geometry();
+	CHECK_EQ(g.width, 200u);
+	CHECK_EQ(g.height, 80u);
+
+	// move_to updates geometry after the next pump
+	draw_ov.move_to(300, 400);
+	CHECK(draw_ov.pump());
+	g = draw_ov.geometry();
+	CHECK_EQ(g.x, 300);
+	CHECK_EQ(g.y, 400);
+
+	// resize updates geometry
+	draw_ov.resize({240, 100});
+	CHECK(draw_ov.pump());
+	g = draw_ov.geometry();
+	CHECK_EQ(g.width, 240u);
+	CHECK_EQ(g.height, 100u);
+
+	// click-through must survive a resize (XWayland resets ShapeInput)
+	CHECK_EQ(draw_ov.caps().clickthrough, caps.clickthrough);
+
+	// a full immediate-mode frame does not crash and pumps clean
+	draw_ov.begin();
+	draw_ov.rect({0, 0, 240, 100}, stow::Color::red(), 2);   // outline
+	draw_ov.rect({10, 10, 40, 20}, stow::Color::blue(), 0);  // filled
+	draw_ov.text(6, 40, "1234,5678", stow::Color::white());
+	draw_ov.end();
+	CHECK(draw_ov.pump());
+
+	// pump(timeout) returns within roughly the timeout rather than blocking
+	{
+		auto t0 = std::chrono::steady_clock::now();
+		CHECK(draw_ov.pump(std::chrono::milliseconds(50)));
+		auto elapsed = std::chrono::steady_clock::now() - t0;
+		CHECK(elapsed < std::chrono::milliseconds(500));
+	}
+
+	// run() drives the callback and stops when the callback closes the overlay
+	{
+		int ticks = 0;
+		draw_ov.run(std::chrono::milliseconds(10), [&ticks](stow::Overlay& o) {
+			ticks++;
+			o.begin();
+			o.text(4, 20, "tick", stow::Color::white());
+			o.end();
+			if(ticks >= 5) o.close();
+		});
+		CHECK_EQ(ticks, 5);
+		CHECK(!draw_ov.open());
+	}
 
 	CHECK_REPORT();
 }
