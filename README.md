@@ -66,8 +66,17 @@ while (ov.pump(std::chrono::milliseconds(16))) {   // ~60fps
 }
 ```
 
-That is `test/test_cursor.cpp` verbatim — build it and run
+That is essentially `test/test_cursor.cpp` — build it and run
 `./build/bin/test_cursor 10`.
+
+> **XWayland caveat:** `stow::pointer()` uses `XQueryPointer`, which does not
+> track the cursor under XWayland — the X server is only told about motion over
+> surfaces it owns, so the position freezes until the cursor crosses an X
+> window. Everything else (click-through, transparency, placement,
+> multi-monitor, rendering) works normally there. If you need the pointer on a
+> Wayland compositor, ask the compositor: `test_cursor.cpp` shows the pattern
+> using `hyprctl cursorpos`, including the monitor-name mapping needed because
+> Hyprland and X do not share a coordinate space.
 
 ### Capabilities degrade, they don't fail
 

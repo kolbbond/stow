@@ -109,6 +109,23 @@ the X connection.
   render (WSLg requirement). Report it via `caps()`; only "no display" is an
   error.
 - **Public headers are C++20.** `src/` may use newer.
+- **`stow::pointer()` does not work under XWayland.** XWayland only learns of
+  pointer motion over surfaces it owns, so while the cursor is over
+  Wayland-native windows the X server keeps reporting the last position it saw
+  — it unsticks only when the cursor crosses an X window. Measured on this
+  machine: `XQueryPointer` froze at one value across four samples while the
+  pointer genuinely moved, and `PointerMotionMask` on the root window produced
+  **0** `MotionNotify` events in 4s. This is not polling-vs-events; X is never
+  told. Everything else (click-through, ARGB, placement, multi-monitor,
+  rendering) works fine on XWayland.
+
+  The workaround is to ask the compositor, and it belongs in the **consumer**,
+  not the library — see the `cursor()` helper in `test/test_cursor.cpp`, which
+  shells out to `hyprctl cursorpos`. Note Hyprland and X do **not** share a
+  coordinate space (Hyprland here is an L-shaped 3840x2160 arrangement; X
+  reports a flat 5760x1080), so positions must be translated by matching
+  monitor names, which do agree. `shud`'s `mouse` HUD field is affected by the
+  same limitation.
 
 ## Testing notes
 
