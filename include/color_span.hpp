@@ -1,9 +1,8 @@
-// ColorSpan - platform-independent colored text span
+// ColorSpan - platform-independent colored text span.
+// Deprecated: the type now lives in <stow/text.hpp> as stow::ColorSpan.
+// This alias keeps pre-namespace code compiling; removed in the cleanup task.
 #pragma once
 
-#include <string>
+#include "stow/text.hpp"
 
-struct ColorSpan {
-	std::string text;
-	unsigned int rgb;
-};
+using ColorSpan = stow::ColorSpan;

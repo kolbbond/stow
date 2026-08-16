@@ -12,6 +12,7 @@ set(test_list
     test_layout.cpp
     test_layout_unit.cpp
     test_grid_unit.cpp
+    test_color_unit.cpp
     test_hud_config.cpp
     test_clickthrough.cpp
     test_widgets.cpp
@@ -40,6 +41,7 @@ add_test(NAME test_monitor     COMMAND test_monitor)
 add_test(NAME test_layout      COMMAND test_layout)
 add_test(NAME test_layout_unit COMMAND test_layout_unit)
 add_test(NAME test_grid_unit   COMMAND test_grid_unit)
+add_test(NAME test_color_unit  COMMAND test_color_unit)
 add_test(NAME test_hud_config  COMMAND test_hud_config)
 add_test(NAME test_clickthrough COMMAND test_clickthrough)
 add_test(NAME test_widgets     COMMAND test_widgets)
