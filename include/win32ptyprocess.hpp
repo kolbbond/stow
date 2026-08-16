@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "config.h"
-#include "process.hpp"
-#include "screen_buffer.hpp"
+#include "proc/process.hpp"
+#include "proc/screen_buffer.hpp"
 #include "win32window.hpp"
 
 typedef std::shared_ptr<class Win32PTYProcess> ShWin32PTYProcessPr;

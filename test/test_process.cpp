@@ -3,8 +3,8 @@
 #include "platform.hpp"
 
 #if STOW_POSIX
-#include "pipeprocess.hpp"
-#include "ptyprocess.hpp"
+#include "proc/pipeprocess.hpp"
+#include "proc/ptyprocess.hpp"
 #elif STOW_WINDOWS
 #include "win32pipeprocess.hpp"
 #include "win32ptyprocess.hpp"

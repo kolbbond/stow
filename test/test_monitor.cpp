@@ -1,8 +1,8 @@
 // test multi-monitor detection
 #include "stow/config.hpp"
 #include "skip_if_headless.hpp"
-#include "stow/monitor.hpp"
-#include "xwindow.hpp"
+#include "x11/monitor.hpp"
+#include "x11/window.hpp"
 
 #include <iostream>
 

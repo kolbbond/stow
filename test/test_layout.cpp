@@ -2,7 +2,7 @@
 #include "stow/config.hpp"
 #include "stow/layout.hpp"
 #include "stow/grid.hpp"
-#include "stow/monitor.hpp"
+#include "x11/monitor.hpp"
 
 #include <iostream>
 #include <iomanip>

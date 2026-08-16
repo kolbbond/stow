@@ -70,33 +70,55 @@ else()
     message(STATUS "Xinerama not found")
 endif()
 
-# add library
-add_library(stowlib INTERFACE)
-target_include_directories(stowlib INTERFACE
-    include
+# stow library - public API in include/, platform code private in src/
+add_library(stow STATIC
+    src/overlay.cpp
+)
+add_library(stow::stow ALIAS stow)
+
+target_include_directories(stow
+    PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${FREETYPE_INCLUDE_DIRS}
+)
+
+# PRIVATE is the point: consumers link stow::stow and inherit no X11.
+target_link_libraries(stow PRIVATE ${STOW_PLATFORM_LIBS})
+if(X11_Xrandr_FOUND)
+    target_link_libraries(stow PRIVATE ${X11_Xrandr_LIB})
+endif()
+if(X11_Xinerama_FOUND)
+    target_link_libraries(stow PRIVATE ${X11_Xinerama_LIB})
+endif()
+target_compile_definitions(stow PRIVATE ${STOW_COMPILE_DEFINITIONS})
+
+# Transitional: stow/shud and the older tests still include X11 headers
+# directly, so they need the private include dir and the X11 libs. Later tasks
+# port them onto the public API and this target goes away.
+add_library(stowlegacy INTERFACE)
+target_include_directories(stowlegacy INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${FREETYPE_INCLUDE_DIRS}
 )
-target_link_libraries(stowlib INTERFACE ${STOW_PLATFORM_LIBS})
-
-# Add optional libraries
+target_link_libraries(stowlegacy INTERFACE ${STOW_PLATFORM_LIBS})
 if(X11_Xrandr_FOUND)
-    target_link_libraries(stowlib INTERFACE ${X11_Xrandr_LIB})
+    target_link_libraries(stowlegacy INTERFACE ${X11_Xrandr_LIB})
 endif()
-
 if(X11_Xinerama_FOUND)
-    target_link_libraries(stowlib INTERFACE ${X11_Xinerama_LIB})
+    target_link_libraries(stowlegacy INTERFACE ${X11_Xinerama_LIB})
 endif()
+target_compile_definitions(stowlegacy INTERFACE ${STOW_COMPILE_DEFINITIONS})
 
-# Add compile definitions
-target_compile_definitions(stowlib INTERFACE ${STOW_COMPILE_DEFINITIONS})
-
-# main stow executable
-add_executable(stow src/stow.cpp)
-target_link_libraries(stow stowlib)
+# main stow executable (the library now owns the target name "stow")
+add_executable(stow_bin src/stow.cpp)
+set_target_properties(stow_bin PROPERTIES OUTPUT_NAME stow)
+target_link_libraries(stow_bin PRIVATE stowlegacy)
 
 # shud - grid-based overlay HUD
 add_executable(shud src/shud.cpp)
-target_link_libraries(shud stowlib)
+target_link_libraries(shud PRIVATE stowlegacy)
 
 # add test
 enable_testing()

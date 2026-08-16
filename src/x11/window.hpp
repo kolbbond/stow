@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "stow/config.hpp"
-#include "error.hpp"
-#include "window.hpp"
+#include "legacy_error.hpp"
+#include "x11/stow_window.hpp"
 
 typedef std::shared_ptr<class XWindow> ShXWindowPr;
 

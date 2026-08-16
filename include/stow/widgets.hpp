@@ -9,9 +9,9 @@
 #include <memory>
 
 #include "widget.hpp"
-#include "xwindow.hpp"
+#include "x11/window.hpp"
 #include "capture.hpp"
-#include "ptyprocess.hpp"
+#include "proc/ptyprocess.hpp"
 
 namespace stow {
 

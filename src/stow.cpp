@@ -1,11 +1,11 @@
 // stow - X11 text overlay window manager
 #include "stow/cli.hpp"
 #include "stow/config.hpp"
-#include "stow/monitor.hpp"
+#include "x11/monitor.hpp"
 #include "stow/layout.hpp"
-#include "ptyprocess.hpp"
-#include "pipeprocess.hpp"
-#include "xwindow.hpp"
+#include "proc/ptyprocess.hpp"
+#include "proc/pipeprocess.hpp"
+#include "x11/window.hpp"
 
 #include <unistd.h>
 

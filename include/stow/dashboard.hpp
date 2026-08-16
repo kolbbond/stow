@@ -17,8 +17,8 @@
 #include "hud_config.hpp"
 #include "widget.hpp"
 #include "widgets.hpp"
-#include "xwindow.hpp"
-#include "monitor.hpp"
+#include "x11/window.hpp"
+#include "x11/monitor.hpp"
 
 namespace stow {
 

@@ -16,7 +16,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "process.hpp"
+#include "proc/process.hpp"
 
 typedef std::shared_ptr<class PipeProcess> ShPipeProcessPr;
 class PipeProcess: public Process {

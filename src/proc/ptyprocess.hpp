@@ -24,9 +24,9 @@
 #include <algorithm>
 #include <iostream>
 
-#include "process.hpp"
-#include "screen_buffer.hpp"
-#include "xwindow.hpp"
+#include "proc/process.hpp"
+#include "proc/screen_buffer.hpp"
+#include "x11/window.hpp"
 
 typedef std::shared_ptr<class PTYProcess> ShPTYProcessPr;
 class PTYProcess: public Process {

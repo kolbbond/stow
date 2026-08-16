@@ -6,7 +6,7 @@
 
 #if STOW_POSIX
 
-#include "xwindow.hpp"
+#include "x11/window.hpp"
 
 #include <X11/keysym.h>
 #include <chrono>

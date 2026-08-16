@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "config.h"
-#include "process.hpp"
+#include "proc/process.hpp"
 
 typedef std::shared_ptr<class Win32PipeProcess> ShWin32PipeProcessPr;
 class Win32PipeProcess : public Process {

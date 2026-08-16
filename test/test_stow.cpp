@@ -4,9 +4,9 @@
 #include "platform.hpp"
 
 #if STOW_POSIX
-#include "pipeprocess.hpp"
-#include "ptyprocess.hpp"
-#include "xwindow.hpp"
+#include "proc/pipeprocess.hpp"
+#include "proc/ptyprocess.hpp"
+#include "x11/window.hpp"
 #include <chrono>
 #include <unistd.h>
 #elif STOW_WINDOWS
@@ -16,7 +16,7 @@
 #include <windows.h>
 #endif
 
-#include "window.hpp"
+#include "x11/stow_window.hpp"
 
 int main() {
 	SKIP_IF_NO_DISPLAY();

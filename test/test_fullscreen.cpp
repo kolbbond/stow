@@ -5,7 +5,7 @@
 
 #if STOW_POSIX
 
-#include "xwindow.hpp"
+#include "x11/window.hpp"
 
 #include <chrono>
 
