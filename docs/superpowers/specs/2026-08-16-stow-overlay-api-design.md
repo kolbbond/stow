@@ -204,7 +204,15 @@ Pointer and monitor position are screen facts, not properties of a window.
 ```cpp
 namespace stow {
 struct Point { int x = 0, y = 0; };
-struct Monitor { int index; Rect bounds; std::string name; bool primary; };
+
+// Field layout unchanged from the existing stow::Monitor — test_layout.cpp and
+// the dashboard already use it, and reshaping it into a Rect buys nothing.
+struct Monitor {
+  int index = 0; std::string name;
+  int x = 0, y = 0; unsigned int width = 0, height = 0;
+  bool primary = false;
+  bool contains(int px, int py) const;
+};
 
 Point                pointer();          // global cursor position
 std::vector<Monitor> monitors();         // XRandR, Xinerama, or single fallback
