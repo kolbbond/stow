@@ -33,7 +33,7 @@ endforeach()
 
 # test_overlay is a consumer of the public API only - it builds with nothing
 # but include/ and libstow.a. If it ever needs stowlegacy, the API has a hole.
-foreach(apitest test_overlay test_screen)
+foreach(apitest test_overlay test_screen test_cursor)
     add_executable(${apitest} ${apitest}.cpp)
     target_link_libraries(${apitest} PRIVATE stow::stow)
     target_include_directories(${apitest} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -55,6 +55,7 @@ add_test(NAME test_clickthrough COMMAND test_clickthrough)
 add_test(NAME test_widgets     COMMAND test_widgets)
 add_test(NAME test_overlay     COMMAND test_overlay)
 add_test(NAME test_screen      COMMAND test_screen)
+add_test(NAME test_cursor      COMMAND test_cursor 3)
 
 # Tests that need a real X display. Two properties:
 #   SKIP_RETURN_CODE 77 - they report skipped, not failed, when $DISPLAY is
@@ -66,7 +67,7 @@ add_test(NAME test_screen      COMMAND test_screen)
 #       ctest -L '.*'      -> everything
 set(STOW_X11_TESTS
     test_xwindow test_fullscreen test_clickthrough test_dashboard test_stow
-    test_widgets test_monitor test_overlay test_screen)
+    test_widgets test_monitor test_overlay test_screen test_cursor)
 
 set_tests_properties(${STOW_X11_TESTS} PROPERTIES
     SKIP_RETURN_CODE 77
