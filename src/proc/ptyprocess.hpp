@@ -287,6 +287,69 @@ public:
 		return !is_done();
 	}
 
+	// Same as pump() above, drawing a whole frame through the public overlay
+	// API instead of an XWindow.
+	bool pump(stow::Overlay& ov) {
+		const size_t kMaxBuffer = 16384;
+		const size_t kMaxLines = 200;
+		bool drew = false;
+
+		set_nonblocking();
+
+		while(true) {
+			char text[256];
+			ssize_t bytes_read = read(_parentfd, text, sizeof(text));
+			if(bytes_read > 0) {
+				ScreenBufferUtils::append_screen(_screen, text, static_cast<size_t>(bytes_read), kMaxLines);
+				drew = true;
+			} else if(bytes_read == 0) {
+				_eof = true;
+				break;
+			} else {
+				if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+				if(errno == EINTR) continue;
+				if(errno == EIO) {
+					_eof = true;
+					break;
+				}
+				die("read");
+			}
+		}
+
+		if(drew) {
+			stow::Lines spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
+			ov.set_spans(spans);
+			ov.pump();
+		}
+
+		if(!_child_exited) {
+			pid_t wp = waitpid(_cmdpid, &_child_status, WNOHANG);
+			if(wp == _cmdpid) {
+				_child_exited = true;
+				_have_status = true;
+			}
+		}
+
+		return !is_done();
+	}
+
+	// Stream this process's output into `ov` until the child exits.
+	void read_text(stow::Overlay& ov) {
+		while(!is_done()) {
+			struct pollfd pfd;
+			pfd.fd = _parentfd;
+			pfd.events = POLLIN | POLLHUP | POLLERR;
+			pfd.revents = 0;
+
+			int pr = poll(&pfd, 1, 100);
+			if(pr == -1) {
+				if(errno == EINTR) continue;
+				die("poll");
+			}
+			pump(ov);
+		}
+	}
+
 	// read output from file pipe - accepts abstract window pointer
 	void read_text(ShWindowPtr win = nullptr) override {
 		dprintf("read_text\n");

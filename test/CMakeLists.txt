@@ -33,7 +33,7 @@ endforeach()
 
 # test_overlay is a consumer of the public API only - it builds with nothing
 # but include/ and libstow.a. If it ever needs stowlegacy, the API has a hole.
-foreach(apitest test_overlay test_screen test_cursor)
+foreach(apitest test_overlay test_screen test_cursor test_hud)
     add_executable(${apitest} ${apitest}.cpp)
     target_link_libraries(${apitest} PRIVATE stow::stow)
     target_include_directories(${apitest} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -56,6 +56,7 @@ add_test(NAME test_widgets     COMMAND test_widgets)
 add_test(NAME test_overlay     COMMAND test_overlay)
 add_test(NAME test_screen      COMMAND test_screen)
 add_test(NAME test_cursor      COMMAND test_cursor 3)
+add_test(NAME test_hud         COMMAND test_hud ${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini)
 
 # Tests that need a real X display. Two properties:
 #   SKIP_RETURN_CODE 77 - they report skipped, not failed, when $DISPLAY is
@@ -67,7 +68,7 @@ add_test(NAME test_cursor      COMMAND test_cursor 3)
 #       ctest -L '.*'      -> everything
 set(STOW_X11_TESTS
     test_xwindow test_fullscreen test_clickthrough test_dashboard test_stow
-    test_widgets test_monitor test_overlay test_screen test_cursor)
+    test_widgets test_monitor test_overlay test_screen test_cursor test_hud)
 
 set_tests_properties(${STOW_X11_TESTS} PROPERTIES
     SKIP_RETURN_CODE 77
@@ -83,6 +84,8 @@ if(NOT STOW_TEST_X11)
 endif()
 
 target_compile_definitions(test_hud_config PRIVATE
+    HUD_TEST_INI="${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini")
+target_compile_definitions(test_hud PRIVATE
     HUD_TEST_INI="${CMAKE_CURRENT_SOURCE_DIR}/hud_test.ini")
 
 message(STATUS "end of test creation")

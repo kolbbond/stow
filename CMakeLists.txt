@@ -74,6 +74,7 @@ endif()
 add_library(stow STATIC
     src/overlay.cpp
     src/x11/screen.cpp
+    src/hud/hud.cpp
 )
 add_library(stow::stow ALIAS stow)
 
@@ -113,13 +114,14 @@ endif()
 target_compile_definitions(stowlegacy INTERFACE ${STOW_COMPILE_DEFINITIONS})
 
 # main stow executable (the library now owns the target name "stow")
-add_executable(stow_bin src/stow.cpp)
+add_executable(stow_bin src/bin/stow.cpp)
 set_target_properties(stow_bin PROPERTIES OUTPUT_NAME stow)
 target_link_libraries(stow_bin PRIVATE stowlegacy)
 
 # shud - grid-based overlay HUD
-add_executable(shud src/shud.cpp)
-target_link_libraries(shud PRIVATE stowlegacy)
+# shud is a pure consumer of the public API - no private include path.
+add_executable(shud src/bin/shud.cpp)
+target_link_libraries(shud PRIVATE stow::stow)
 
 # add test
 enable_testing()

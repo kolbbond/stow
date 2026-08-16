@@ -396,7 +396,11 @@ public:
 	}
 
 	void run() override {
-		if(_hidden) {
+		// A zero-sized window is nothing to show, and XMoveResizeWindow with a
+		// zero extent is a BadValue. This happens legitimately before the first
+		// draw in size-to-content mode, and whenever the command produced no
+		// output - both of which stow already treats as "hide".
+		if(_hidden || _window_width == 0 || _window_height == 0) {
 			XUnmapWindow(_dpy, _win);
 			XSync(_dpy, False);
 			return;
