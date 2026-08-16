@@ -78,6 +78,10 @@ public:
 	bool open() const;  // shown and not closed
 	Caps caps() const;
 
+	// Toggle input passthrough at runtime. No-op when the compositor never
+	// granted it (caps().clickthrough == false).
+	void set_clickthrough(bool enabled);
+
 	// --- geometry (runtime) ---
 	void move_to(int x, int y);
 	void resize(Size s);
@@ -102,6 +106,11 @@ public:
 	void set_spans(const Lines& lines);
 
 	// --- loop ---
+	// Test hook: the pixel value this overlay would hand to core-X11 drawing
+	// for `c`. Exposed so a test can catch the alpha-stripping failure mode
+	// (see test_overlay), which is invisible to any crash-only check.
+	unsigned long debug_solid_pixel(Color c) const;
+
 	// Services X events and presents. Returns false once closed.
 	bool pump();                                   // non-blocking
 	bool pump(std::chrono::milliseconds timeout);  // waits up to timeout on X events

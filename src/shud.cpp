@@ -1,6 +1,6 @@
 // shud - stow hud: grid-based overlay dashboard driven by a config file
 #include "stow/hud_config.hpp"
-#include "stow/dashboard.hpp"
+#include "hud/dashboard.hpp"
 
 #include <cstdlib>
 #include <iostream>

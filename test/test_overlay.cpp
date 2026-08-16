@@ -27,7 +27,7 @@ int main() {
 		std::fprintf(stderr, "create failed: %s\n", err.message.c_str());
 		CHECK_REPORT();
 	}
-	CHECK_EQ(int(err.code), int(stow::Error::Code::None));
+	CHECK_EQ(int(err.code), int(stow::Error::Code::Ok));
 
 	// Capabilities are reported, never asserted true: on WSLg or a compositor
 	// without XShape/ARGB these are legitimately false and the overlay must
@@ -108,6 +108,21 @@ int main() {
 		CHECK(draw_ov.pump(std::chrono::milliseconds(50)));
 		auto elapsed = std::chrono::steady_clock::now() - t0;
 		CHECK(elapsed < std::chrono::milliseconds(500));
+	}
+
+	// Regression: shapes must be drawn OPAQUE on a 32-bit ARGB visual.
+	//
+	// XftColorAllocValue packs its `pixel` from the visual's RGB masks only
+	// (Xlib's Visual has no alpha mask), so on depth 32 the alpha bits come
+	// back zero. Core-X11 drawing uses that pixel, so every rect was painted
+	// fully transparent - visible as nothing at all on screen, while every
+	// test still passed because nothing crashed. Assert the pixel we would
+	// actually hand to XSetForeground carries alpha.
+	if(draw_ov.caps().transparency) {
+		CHECK_EQ(stow::Color::red().rgb(), 0xff0000u);
+		// 0xAARRGGBB with alpha forced opaque
+		CHECK_EQ(draw_ov.debug_solid_pixel(stow::Color::red()), 0xffff0000ul);
+		CHECK_EQ(draw_ov.debug_solid_pixel(stow::Color::parse("#00a080")), 0xff00a080ul);
 	}
 
 	// run() drives the callback and stops when the callback closes the overlay

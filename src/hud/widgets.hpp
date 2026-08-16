@@ -8,9 +8,8 @@
 #include <ctime>
 #include <memory>
 
-#include "widget.hpp"
-#include "x11/window.hpp"
-#include "capture.hpp"
+#include "stow/widget.hpp"
+#include "stow/capture.hpp"
 #include "proc/ptyprocess.hpp"
 
 namespace stow {
@@ -59,8 +58,7 @@ public:
 				out << f << ": ?\n";  // unknown field shown literally
 			}
 		}
-		const Rect& r = ctx.region;
-		ctx.win->draw_region(out.str(), r.x, r.y, r.width, r.height);
+		ctx.win->text_in(ctx.region, out.str());
 	}
 
 private:
@@ -82,8 +80,7 @@ public:
 
 	void render(RenderCtx& ctx) override {
 		if(!ctx.win) return;
-		const Rect& r = ctx.region;
-		ctx.win->draw_region(number_text(_label, _value), r.x, r.y, r.width, r.height);
+		ctx.win->text_in(ctx.region, number_text(_label, _value));
 	}
 
 private:
@@ -95,8 +92,8 @@ private:
 // Runs a command every `period` seconds, draws a horizontal gauge of value/max.
 class BarWidget : public Widget {
 public:
-	BarWidget(std::string cmd, std::string label, double max, int period)
-		: _cmd(std::move(cmd)), _label(std::move(label)), _max(max), _period(period < 1 ? 1 : period) {}
+	BarWidget(std::string cmd, std::string label, double max, int period, Color fg = Color::parse("#00a080"))
+		: _cmd(std::move(cmd)), _label(std::move(label)), _max(max), _period(period < 1 ? 1 : period), _fg(fg) {}
 
 	void update() override {
 		std::time_t t = std::time(nullptr);
@@ -107,12 +104,12 @@ public:
 
 	void render(RenderCtx& ctx) override {
 		if(!ctx.win) return;
-		XWindow& w = *ctx.win;
+		Overlay& w = *ctx.win;
 		const Rect& r = ctx.region;
 		double frac = bar_fraction(_value, _max);
 
 		// label + value text on top
-		w.draw_region(number_text(_label, _value), r.x, r.y, r.width, r.height);
+		w.text_in(r, number_text(_label, _value));
 
 		// gauge: outline + filled portion along the bottom of the cell
 		int pad = 4;
@@ -121,16 +118,20 @@ public:
 		int by = r.y + static_cast<int>(r.height) - bh - pad;
 		int bw = static_cast<int>(r.width) - 2 * pad;
 		if(bw <= 0 || by <= r.y) return;
-		XSetForeground(w._dpy, w._xgc, w._xforeground.pixel);
-		XDrawRectangle(w._dpy, w._drawable, w._xgc, bx, by, bw, bh);
+
+		// Previously this used the window's raw _xforeground pixel. That is an
+		// allocated X pixel value, not an RGB triple; the configured foreground
+		// color is the correct equivalent and needs no X11 handles.
+		w.rect(Rect{bx, by, static_cast<unsigned int>(bw), static_cast<unsigned int>(bh)}, _fg, 1);
 		int fillw = static_cast<int>(frac * bw);
-		if(fillw > 0) XFillRectangle(w._dpy, w._drawable, w._xgc, bx, by, fillw, bh);
+		if(fillw > 0) w.rect(Rect{bx, by, static_cast<unsigned int>(fillw), static_cast<unsigned int>(bh)}, _fg, 0);
 	}
 
 private:
 	std::string _cmd, _label, _value;
 	double _max;
 	int _period;
+	Color _fg;
 	std::time_t _last = 0;
 };
 
@@ -164,9 +165,7 @@ public:
 
 	void render(RenderCtx& ctx) override {
 		if(!ctx.win || !_proc || _done) return;
-		const Rect& r = ctx.region;
-		ShXWindowPr win = ctx.win->shared_self();
-		_proc->pump_region(win, r.x, r.y, r.width, r.height);
+		_proc->pump_region(*ctx.win, ctx.region);
 	}
 
 private:

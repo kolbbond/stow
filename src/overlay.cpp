@@ -157,6 +157,13 @@ bool Overlay::open() const { return _p->shown && !_p->closed; }
 
 Caps Overlay::caps() const { return _p->caps; }
 
+unsigned long Overlay::debug_solid_pixel(Color c) const { return _p->win->solid_pixel(c.rgb()); }
+
+void Overlay::set_clickthrough(bool enabled) {
+	if(!_p->caps.clickthrough && enabled) return;  // never granted; nothing to turn on
+	_p->win->set_clickthrough(enabled);
+}
+
 void Overlay::set_text(std::string_view text) {
 	if(_p->closed) return;
 	_p->win->draw(std::string(text));

@@ -13,12 +13,12 @@
 #include <poll.h>
 #include <unistd.h>
 
-#include "grid.hpp"
-#include "hud_config.hpp"
-#include "widget.hpp"
-#include "widgets.hpp"
-#include "x11/window.hpp"
-#include "x11/monitor.hpp"
+#include "stow/grid.hpp"
+#include "stow/hud_config.hpp"
+#include "stow/widget.hpp"
+#include "stow/overlay.hpp"
+#include "stow/screen.hpp"
+#include "hud/widgets.hpp"
 
 namespace stow {
 
@@ -120,7 +120,9 @@ public:
 
 private:
 	struct Pending { int row, col; std::unique_ptr<Widget> widget; };
-	struct Placed { std::unique_ptr<Widget> widget; Rect region; ShXWindowPr win; };
+	// Overlay is move-only; shared_ptr gives Placed entries a stable address for
+	// RenderCtx and lets several cells share one window in single_window mode.
+	struct Placed { std::unique_ptr<Widget> widget; Rect region; std::shared_ptr<Overlay> win; };
 
 	GridConfig _grid;
 	std::vector<Pending> _pending;
@@ -131,20 +133,15 @@ private:
 inline void Dashboard::run() {
 	GridLayout grid(_grid);
 
-	// monitor geometry
-	unsigned int screen_w = 0, screen_h = 0;
-	int monitor_x = 0, monitor_y = 0;
-	{
-		Display* tmp = XOpenDisplay(nullptr);
-		if(!tmp) { std::cerr << "dashboard: cannot open display\n"; return; }
-		int scr = DefaultScreen(tmp);
-		screen_w = DisplayWidth(tmp, scr);
-		screen_h = DisplayHeight(tmp, scr);
-		auto mgr = MonitorManager::create(tmp);
-		const Monitor* mon = mgr->at(monitor);
-		if(mon) { monitor_x = mon->x; monitor_y = mon->y; screen_w = mon->width; screen_h = mon->height; }
-		XCloseDisplay(tmp);
+	// monitor geometry, via the public screen API
+	Monitor mon = primary_monitor();
+	if(monitor >= 0) {
+		std::vector<Monitor> all = monitors();
+		if(monitor < static_cast<int>(all.size())) mon = all[monitor];
 	}
+	int monitor_x = mon.x, monitor_y = mon.y;
+	unsigned int screen_w = mon.width, screen_h = mon.height;
+	if(screen_w == 0 || screen_h == 0) { std::cerr << "dashboard: cannot open display\n"; return; }
 
 	unsigned int grid_w = 0, grid_h = 0;
 	grid.total_size(screen_w, screen_h, grid_w, grid_h);
@@ -154,39 +151,39 @@ inline void Dashboard::run() {
 	GridLayout::GridLines lines;
 	if(single_window && grid_lines) lines = grid.get_grid_lines(screen_w, screen_h);
 
-	ShXWindowPr shared;
+	const Color fg = Color::parse("#00a080");
+
+	auto make_overlay = [&](int x, int y, unsigned int w, unsigned int h) -> std::shared_ptr<Overlay> {
+		OverlayConfig oc;
+		oc.title = "shud";
+		oc.clickthrough = true;
+		oc.size = Size{w, h};
+		Error err;
+		std::optional<Overlay> ov = Overlay::create(oc, &err);
+		if(!ov) { std::cerr << "dashboard: " << err.message << "\n"; return nullptr; }
+		ov->move_to(x, y);
+		ov->show();
+		return std::make_shared<Overlay>(std::move(*ov));
+	};
+
+	std::shared_ptr<Overlay> shared;
 	if(single_window) {
-		WindowConfig wc;
-		wc.title = "shud";
-		wc.overlay = true;
-		wc.use_fixed_geometry = true;
-		wc.fixed_x = monitor_x; wc.fixed_y = monitor_y;
-		wc.fixed_w = fit_to_cells ? grid_w : screen_w;
-		wc.fixed_h = fit_to_cells ? grid_h : screen_h;
-		shared = XWindow::create(wc);
-		shared->setup();
+		shared = make_overlay(monitor_x, monitor_y, fit_to_cells ? grid_w : screen_w, fit_to_cells ? grid_h : screen_h);
+		if(!shared) return;
 	}
 
 	std::vector<Placed> placed;
 	for(Pending& p : _pending) {
 		int idx = grid.cell_index(p.row, p.col);
 		if(idx < 0 || idx >= static_cast<int>(geoms.size())) continue;
-		ShXWindowPr win;
+		std::shared_ptr<Overlay> win;
 		Rect region;
 		if(single_window) {
 			win = shared;
 			region = geoms[idx];
 		} else {
-			WindowConfig wc;
-			wc.title = "shud";
-			wc.overlay = true;
-			wc.use_fixed_geometry = true;
-			wc.fixed_x = monitor_x + geoms[idx].x;
-			wc.fixed_y = monitor_y + geoms[idx].y;
-			wc.fixed_w = geoms[idx].width;
-			wc.fixed_h = geoms[idx].height;
-			win = XWindow::create(wc);
-			win->setup();
+			win = make_overlay(monitor_x + geoms[idx].x, monitor_y + geoms[idx].y, geoms[idx].width, geoms[idx].height);
+			if(!win) continue;
 			region = Rect{0, 0, geoms[idx].width, geoms[idx].height};
 		}
 		placed.push_back({std::move(p.widget), region, win});
@@ -194,12 +191,13 @@ inline void Dashboard::run() {
 
 	if(placed.empty() && !shared) { std::cerr << "dashboard: no widgets placed\n"; return; }
 
-	Display* dpy = shared ? shared->_dpy : placed[0].win->_dpy;
-	Window root = shared ? shared->_root : placed[0].win->_root;
-
-	// toggle key grab
+	// The toggle key needs a root-window grab, which the Overlay API does not
+	// expose (and should not - it is a global input concern, not a window one).
+	// Dashboard keeps its own connection for exactly that.
+	Display* dpy = XOpenDisplay(nullptr);
+	Window root = dpy ? DefaultRootWindow(dpy) : 0;
 	unsigned int tmod = 0; KeySym tsym = NoSymbol; KeyCode tcode = 0;
-	if(parse_keybind(toggle_key, tmod, tsym)) {
+	if(dpy && parse_keybind(toggle_key, tmod, tsym)) {
 		tcode = XKeysymToKeycode(dpy, tsym);
 		if(tcode) {
 			XGrabKey(dpy, tcode, tmod, root, False, GrabModeAsync, GrabModeAsync);
@@ -207,8 +205,8 @@ inline void Dashboard::run() {
 			XGrabKey(dpy, tcode, tmod | LockMask, root, False, GrabModeAsync, GrabModeAsync);
 			XGrabKey(dpy, tcode, tmod | Mod2Mask | LockMask, root, False, GrabModeAsync, GrabModeAsync);
 		}
+		XSync(dpy, False);
 	}
-	XSync(dpy, False);
 
 	DashStats stats;
 	int frames = 0;
@@ -234,37 +232,46 @@ inline void Dashboard::run() {
 		auto now_c = std::chrono::steady_clock::now();
 		double elapsed = std::chrono::duration<double>(now_c - last_fps).count();
 		if(elapsed >= 1.0) { stats.fps = frames / elapsed; frames = 0; last_fps = now_c; }
-		{
-			Window qr, qc; int wx, wy; unsigned int mask;
-			if(XQueryPointer(dpy, root, &qr, &qc, &stats.mouse_x, &stats.mouse_y, &wx, &wy, &mask) == False) {
-				stats.mouse_x = 0; stats.mouse_y = 0;
-			}
-		}
+		Point mp = pointer();
+		stats.mouse_x = mp.x;
+		stats.mouse_y = mp.y;
+
+		if(single_window && shared) shared->begin();
 
 		for(Placed& pw : placed) {
+			if(!single_window && pw.win) pw.win->begin();
 			RenderCtx ctx{pw.win.get(), pw.region, &stats};
 			pw.widget->render(ctx);
-			if(!single_window && pw.win) pw.win->run();
+			if(!single_window && pw.win) { pw.win->end(); pw.win->pump(); }
 		}
 
 		if(single_window && shared) {
 			if(grid_lines) {
-				XSetForeground(shared->_dpy, shared->_xgc, shared->_xforeground.pixel);
-				for(int hy : lines.horizontal_y) XDrawLine(shared->_dpy, shared->_drawable, shared->_xgc, 0, hy, grid_w, hy);
-				for(int vx : lines.vertical_x) XDrawLine(shared->_dpy, shared->_drawable, shared->_xgc, vx, 0, vx, grid_h);
+				// A grid line is a 1px filled rect - no raw X11 drawing needed.
+				for(int hy : lines.horizontal_y) shared->rect(Rect{0, hy, grid_w, 1}, fg, 0);
+				for(int vx : lines.vertical_x) shared->rect(Rect{vx, 0, 1, grid_h}, fg, 0);
 			}
-			shared->run();
+			shared->end();
+			shared->pump();
 		}
 
-		while(XPending(dpy)) {
-			XEvent ev; XNextEvent(dpy, &ev);
-			if(ev.type == KeyPress && tcode && ev.xkey.keycode == tcode) {
-				_interactive = !_interactive;
-				if(shared) shared->set_clickthrough(true);
-				else for(Placed& pw : placed) if(pw.win) pw.win->set_clickthrough(true);
+		if(dpy) {
+			while(XPending(dpy)) {
+				XEvent ev; XNextEvent(dpy, &ev);
+				if(ev.type == KeyPress && tcode && ev.xkey.keycode == tcode) {
+					_interactive = !_interactive;
+					// Interactive means the HUD accepts clicks, so passthrough
+					// is the inverse. The pre-port code always passed `true`
+					// here, which made the toggle a no-op.
+					if(shared) shared->set_clickthrough(!_interactive);
+					for(Placed& pw : placed)
+						if(!single_window && pw.win) pw.win->set_clickthrough(!_interactive);
+				}
 			}
 		}
 	}
+
+	if(dpy) XCloseDisplay(dpy);
 }
 
 }  // namespace stow

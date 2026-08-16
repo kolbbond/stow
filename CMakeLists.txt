@@ -103,7 +103,7 @@ target_include_directories(stowlegacy INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${FREETYPE_INCLUDE_DIRS}
 )
-target_link_libraries(stowlegacy INTERFACE ${STOW_PLATFORM_LIBS})
+target_link_libraries(stowlegacy INTERFACE stow::stow ${STOW_PLATFORM_LIBS})
 if(X11_Xrandr_FOUND)
     target_link_libraries(stowlegacy INTERFACE ${X11_Xrandr_LIB})
 endif()

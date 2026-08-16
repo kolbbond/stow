@@ -27,6 +27,7 @@
 #include "proc/process.hpp"
 #include "proc/screen_buffer.hpp"
 #include "x11/window.hpp"
+#include "stow/overlay.hpp"
 
 typedef std::shared_ptr<class PTYProcess> ShPTYProcessPr;
 class PTYProcess: public Process {
@@ -227,6 +228,52 @@ public:
 		if(drew && xwin != nullptr) {
 			std::vector<std::vector<ColorSpan>> spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
 			xwin->draw_region_spans(spans, rx, ry, rw, rh);
+		}
+
+		if(!_child_exited) {
+			pid_t wp = waitpid(_cmdpid, &_child_status, WNOHANG);
+			if(wp == _cmdpid) {
+				_child_exited = true;
+				_have_status = true;
+			}
+		}
+
+		return !is_done();
+	}
+
+	// Same as pump_region above, but drawing through the public overlay API.
+	// This is what dashboard widgets use; the ShXWindowPr overload remains for
+	// the not-yet-ported stow binary.
+	bool pump_region(stow::Overlay& ov, stow::Rect region) {
+		const size_t kMaxBuffer = 16384;
+		const size_t kMaxLines = 200;
+		bool drew = false;
+
+		set_nonblocking();
+
+		while(true) {
+			char text[256];
+			ssize_t bytes_read = read(_parentfd, text, sizeof(text));
+			if(bytes_read > 0) {
+				ScreenBufferUtils::append_screen(_screen, text, static_cast<size_t>(bytes_read), kMaxLines);
+				drew = true;
+			} else if(bytes_read == 0) {
+				_eof = true;
+				break;
+			} else {
+				if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+				if(errno == EINTR) continue;
+				if(errno == EIO) {
+					_eof = true;
+					break;
+				}
+				die("read");
+			}
+		}
+
+		if(drew) {
+			stow::Lines spans = ScreenBufferUtils::compose_screen_spans(_screen, kMaxBuffer);
+			ov.spans_in(region, spans);
 		}
 
 		if(!_child_exited) {

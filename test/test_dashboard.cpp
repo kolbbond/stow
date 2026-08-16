@@ -1,7 +1,7 @@
 // bounded integration demo: build a Dashboard from the fixture config and run briefly
 #include "stow/hud_config.hpp"
 #include "skip_if_headless.hpp"
-#include "stow/dashboard.hpp"
+#include "hud/dashboard.hpp"
 
 #include <cstdlib>
 #include <iostream>

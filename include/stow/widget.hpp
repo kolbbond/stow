@@ -1,12 +1,10 @@
-// Stow dashboard widget interface
+// Stow dashboard widget interface. Public and X11-free.
 #pragma once
 
 #include <ctime>
 
-#include "layout.hpp"   // stow::Rect
-
-// Forward-declare to avoid pulling X11 into headless consumers/tests.
-class XWindow;
+#include "stow/layout.hpp"   // stow::Rect
+#include "stow/overlay.hpp"  // stow::Overlay
 
 namespace stow {
 
@@ -20,17 +18,17 @@ struct DashStats {
 
 // What a widget needs to draw itself this frame.
 struct RenderCtx {
-	XWindow* win = nullptr;   // target window (shared or per-cell); never null at render time
-	Rect region;              // pixel rect within the window to draw into
+	Overlay* win = nullptr;  // target overlay; never null at render time
+	Rect region;             // pixel rect within the window to draw into
 	const DashStats* stats = nullptr;
 };
 
 class Widget {
 public:
 	virtual ~Widget() = default;
-	virtual void update() {}                 // refresh internal state (poll process, sample value)
-	virtual void render(RenderCtx& ctx) = 0; // draw into ctx.region
-	virtual int fd() const { return -1; }    // pollable fd, or -1 if none
+	virtual void update() {}                     // refresh internal state (poll process, sample value)
+	virtual void render(RenderCtx& ctx) = 0;     // draw into ctx.region
+	virtual int fd() const { return -1; }        // pollable fd, or -1 if none
 	virtual bool dirty() const { return true; }  // skip redraw when false (optional optimization)
 };
 

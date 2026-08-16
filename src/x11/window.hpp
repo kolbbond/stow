@@ -444,14 +444,26 @@ public:
 	// Clear the backing pixmap to the (possibly transparent) background.
 	void begin_frame() { clear_drawable(); }
 
+	// Pixel value for core-X11 drawing (XFillRectangle et al).
+	//
+	// XftColorAllocValue packs `pixel` from the visual's red/green/blue masks
+	// only - Xlib's Visual has no alpha mask - so on a 32-bit ARGB visual the
+	// alpha bits come back zero and anything drawn with that pixel is fully
+	// transparent. Xft text is unaffected because XftDrawStringUtf8 renders
+	// from the XRenderColor, not the pixel. Force alpha opaque here.
+	unsigned long solid_pixel(unsigned int rgb) {
+		if(_depth == 32) return 0xFF000000u | (rgb & 0x00FFFFFFu);
+		return get_color(rgb)->pixel;
+	}
+
 	void fill_rect(int x, int y, unsigned int w, unsigned int h, unsigned int rgb) {
-		XSetForeground(_dpy, _xgc, get_color(rgb)->pixel);
+		XSetForeground(_dpy, _xgc, solid_pixel(rgb));
 		XFillRectangle(_dpy, _drawable, _xgc, x, y, w, h);
 	}
 
 	void draw_rect_outline(int x, int y, unsigned int w, unsigned int h, unsigned int rgb, int thickness) {
 		if(thickness < 1) thickness = 1;
-		XSetForeground(_dpy, _xgc, get_color(rgb)->pixel);
+		XSetForeground(_dpy, _xgc, solid_pixel(rgb));
 		for(int i = 0; i < thickness; i++) {
 			if(w <= static_cast<unsigned int>(2 * i) || h <= static_cast<unsigned int>(2 * i)) break;
 			XDrawRectangle(_dpy, _drawable, _xgc, x + i, y + i, w - 2 * i - 1, h - 2 * i - 1);
